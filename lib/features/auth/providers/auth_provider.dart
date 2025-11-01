@@ -8,8 +8,12 @@ enum AuthStatus { signedIn, signedOut, loading }
 
 // --- 1. CORE PROVIDERS ---
 
-// Provider for the secure storage
-final _storageProvider = Provider((ref) => const FlutterSecureStorage());
+// Provider for the secure storage with Android options
+final _storageProvider = Provider((ref) => const FlutterSecureStorage(
+  aOptions: AndroidOptions(
+    encryptedSharedPreferences: true,
+  ),
+));
 
 // Provider for the Dio instance
 final _dioProvider = Provider((ref) => Dio());
@@ -41,19 +45,48 @@ class AuthRepository {
 
   AuthRepository(this._apiClient, this._storage);
 
-  // Read token from storage
+  // Read token from storage with error handling
   Future<String?> _getToken() async {
-    return await _storage.read(key: _tokenKey);
+    try {
+      return await _storage.read(key: _tokenKey);
+    } catch (e) {
+      // If there's a decryption error, delete the corrupted token
+      print('Error reading token (corrupted data): $e');
+      await _deleteToken();
+      return null;
+    }
   }
 
-  // Save token to storage
+  // Save token to storage with error handling
   Future<void> _saveToken(String token) async {
-    await _storage.write(key: _tokenKey, value: token);
+    try {
+      await _storage.write(key: _tokenKey, value: token);
+    } catch (e) {
+      // If write fails, try to delete and write again
+      print('Error saving token: $e');
+      try {
+        await _storage.delete(key: _tokenKey);
+        await _storage.write(key: _tokenKey, value: token);
+      } catch (retryError) {
+        print('Retry save token failed: $retryError');
+        rethrow;
+      }
+    }
   }
 
   // Delete token from storage
   Future<void> _deleteToken() async {
-    await _storage.delete(key: _tokenKey);
+    try {
+      await _storage.delete(key: _tokenKey);
+    } catch (e) {
+      // If delete fails, try deleteAll
+      print('Error deleting token: $e');
+      try {
+        await _storage.deleteAll();
+      } catch (deleteAllError) {
+        print('Delete all failed: $deleteAllError');
+      }
+    }
   }
 
   // Login function
@@ -70,13 +103,14 @@ class AuthRepository {
       if (response.statusCode == 200 && response.data['token'] != null) {
         final token = response.data['token'] as String;
         await _saveToken(token);
+        
+        // Reset 401 counter after successful login
+        _apiClient.reset401Counter();
       } else {
         // This is a successful request but bad data
         throw 'Login successful, but no token was found.';
       }
     } on DioException catch (e) {
-      // --- THIS IS THE NEW, DETAILED ERROR HANDLING ---
-      
       // Handle API errors (like 401, 404, 500)
       if (e.response != null) {
         // Server responded with an error
@@ -108,9 +142,18 @@ class AuthRepository {
 
   // Logout function
   Future<void> logout() async {
-    // We just need to delete the token locally
+    // Delete the token locally
     await _deleteToken();
+    
+    // Reset 401 counter
+    _apiClient.reset401Counter();
+    
     // You could also call a '/logout' endpoint if your API has one
+    // try {
+    //   await _apiClient.post('/logout');
+    // } catch (e) {
+    //   // Ignore errors during logout
+    // }
   }
 }
 
@@ -123,7 +166,6 @@ final authControllerProvider =
   () => AuthController(),
 );
 
-// --- ADD THIS NEW PROVIDER ---
 // --- 4. REGISTRATION CONTROLLER ---
 final registrationControllerProvider =
     AsyncNotifierProvider<RegistrationController, bool>(
@@ -164,6 +206,7 @@ class AuthController extends AsyncNotifier<AuthStatus> {
     state = const AsyncValue.data(AuthStatus.signedOut);
   }
 }
+
 class RegistrationController extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {

@@ -6,16 +6,51 @@ import 'package:rms_tenant_app/features/home/home_provider/home_provider.dart';
 import 'package:rms_tenant_app/features/notifications/notification_provider.dart';
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _hasShownAuthError = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch auth state to catch logout
+    final authState = ref.watch(authControllerProvider);
+    
+    // Listen to auth state changes for auto-redirect
+    ref.listen(authControllerProvider, (previous, next) {
+      // If auth state changes to signed out, router will handle redirect
+      if (next.value == AuthStatus.signedOut) {
+        print('Auth state changed to signed out - router will redirect');
+      }
+    });
+    
+    // If signed out, show a brief message (router will redirect)
+    if (authState.value == AuthStatus.signedOut) {
+      return Scaffold(
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Redirecting to login...'),
+            ],
+          ),
+        ),
+      );
+    }
+
     final tenancyAsyncValue = ref.watch(homeTenancyProvider);
     const Color primaryColor = Color(0xFF076633);
 
     return tenancyAsyncValue.when(
       data: (tenancy) {
+        _hasShownAuthError = false; // Reset flag on success
         final String tenantName = tenancy.agreement.tenantName;
 
         return Scaffold(
@@ -73,7 +108,7 @@ class HomeScreen extends ConsumerWidget {
                   _buildQuickAccess(context),
                   const SizedBox(height: 24),
                   _buildLatestInvoices(context),
-                  const SizedBox(height: 24), // Extra bottom padding
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -82,14 +117,71 @@ class HomeScreen extends ConsumerWidget {
       },
       
       error: (error, stackTrace) {
+        // Check if it's an auth error
+        final isAuthError = error.toString().contains('Authentication') || 
+                           error.toString().contains('authenticated') ||
+                           error.toString().contains('401') ||
+                           error.toString().contains('Redirecting');
+        
+        // Auto-logout on auth error (only once to prevent loops)
+        if (isAuthError && !_hasShownAuthError) {
+          _hasShownAuthError = true;
+          
+          // Schedule logout after this frame
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              print('Auth error detected - triggering auto-logout');
+              ref.read(authControllerProvider.notifier).logout();
+            }
+          });
+        }
+        
         return Scaffold(
-          appBar: AppBar(title: const Text('Error')),
+          appBar: AppBar(
+            title: const Text('Error'),
+          ),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Could not load home screen. Make sure you are logged in as a TENANT.\n\nError: $error',
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isAuthError ? Icons.lock_outline : Icons.error_outline,
+                    size: 64,
+                    color: isAuthError ? Colors.orange : Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    isAuthError 
+                      ? 'Authentication Error' 
+                      : 'Could not load home screen',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isAuthError
+                      ? 'Your session has expired. Redirecting to login...'
+                      : error.toString(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 24),
+                  if (isAuthError)
+                    const CircularProgressIndicator()
+                  else
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                      onPressed: () {
+                        // Invalidate the provider to retry
+                        ref.invalidate(homeTenancyProvider);
+                      },
+                    ),
+                ],
               ),
             ),
           ),
@@ -132,7 +224,6 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Section - Tenancy Period
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -156,7 +247,6 @@ class HomeScreen extends ConsumerWidget {
             
             const SizedBox(height: 12),
             
-            // View Details Button (Full Width)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -179,10 +269,8 @@ class HomeScreen extends ConsumerWidget {
             
             const SizedBox(height: 20),
             
-            // Bottom Section - Responsive Layout
             LayoutBuilder(
               builder: (context, constraints) {
-                // If screen is narrow, stack vertically
                 if (constraints.maxWidth < 300) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,7 +281,6 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   );
                 }
-                // Otherwise use row layout
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -307,16 +394,13 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
         ),
-        // Responsive Grid
         LayoutBuilder(
           builder: (context, constraints) {
-            // Calculate how many items can fit
             final itemWidth = 110.0;
             final spacing = 16.0;
             final availableWidth = constraints.maxWidth;
             final itemsPerRow = (availableWidth + spacing) ~/ (itemWidth + spacing);
             
-            // If all items fit, use Row with equal spacing
             if (itemsPerRow >= 3) {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -351,7 +435,6 @@ class HomeScreen extends ConsumerWidget {
               );
             }
             
-            // Otherwise use horizontal scroll
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
