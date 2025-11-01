@@ -12,6 +12,8 @@ import 'package:rms_tenant_app/features/shell/main_scaffold.dart';
 import 'package:rms_tenant_app/features/agreement/presentation/agreement_screen.dart';
 import 'package:rms_tenant_app/features/smart_home/presentation/smart_home_screen.dart';
 import 'package:rms_tenant_app/features/notifications/presentation/notification_screen.dart';
+import 'package:rms_tenant_app/shared/models/invoice_model.dart'; // <-- 1. IMPORT MODEL
+import 'package:rms_tenant_app/features/invoices/presentation/invoice_detail_screen.dart'; // <-- 2. IMPORT DETAIL SCREEN
 
 
 // --- Create a GlobalKey for the shell ---
@@ -86,12 +88,23 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Branch 3: Invoices
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/invoices',
                 builder: (context, state) => const InvoicesScreen(),
+                
+                // --- 2. ADD THIS SUB-ROUTE ---
+                routes: [
+                  GoRoute(
+                    path: 'detail', // Full path will be /invoices/detail
+                    builder: (context, state) {
+                      // Get the Invoice object we pass to it
+                      final invoice = state.extra as Invoice;
+                      return InvoiceDetailScreen(invoice: invoice);
+                    },
+                  ),
+                ],
               ),
             ],
           ),

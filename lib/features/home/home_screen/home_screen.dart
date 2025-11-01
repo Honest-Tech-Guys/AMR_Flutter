@@ -5,6 +5,9 @@ import 'package:rms_tenant_app/features/auth/providers/auth_provider.dart';
 import 'package:rms_tenant_app/features/home/home_provider/home_provider.dart';
 import 'package:rms_tenant_app/features/notifications/notification_provider.dart';
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
+import 'package:rms_tenant_app/features/invoices/invoices_provider.dart';
+import 'package:rms_tenant_app/shared/models/invoice_model.dart';
+
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -529,86 +532,141 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // --- UPDATED WIDGET FOR LATEST INVOICES ---
+  // --- UPDATED WIDGET FOR LATEST INVOICES ---
   Widget _buildLatestInvoices(BuildContext context) {
     const Color primaryColor = Color(0xFF076633);
     
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // We will watch the invoices provider here
+    return Consumer(
+      builder: (context, ref, child) {
+        final invoicesAsyncValue = ref.watch(invoicesProvider);
+        
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
-                const Text(
-                  'Latest Invoices',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                // Title and "See all" button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Latest Invoices',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        context.go('/invoices'); // Navigate to Invoices screen
+                      },
+                      child: const Text('See all', style: TextStyle(color: primaryColor)),
+                    ),
+                  ],
                 ),
-                TextButton(
-                  onPressed: () {
-                    context.go('/invoices');
+                const SizedBox(height: 8),
+
+                // Use the provider's state
+                invoicesAsyncValue.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: CircularProgressIndicator(color: primaryColor),
+                  ),
+                  error: (err, stack) => Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Text('Error loading invoices: $err'),
+                  ),
+                  data: (invoices) {
+                    if (invoices.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: Text('No invoices found.'),
+                      );
+                    }
+                    
+                    // Get just the first 3
+                    final latestInvoices = invoices.take(3).toList();
+                    
+                    // Build the list
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: latestInvoices.length,
+                      itemBuilder: (context, index) {
+                        final invoice = latestInvoices[index];
+                        // --- PASS CONTEXT AND INVOICE ---
+                        return _buildInvoiceRow(
+                          context: context, 
+                          invoice: invoice,
+                        );
+                      },
+                      separatorBuilder: (context, index) => const Divider(),
+                    );
                   },
-                  child: const Text('See all', style: TextStyle(color: primaryColor)),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            _buildInvoiceRow('INV-2024-001', 'Oct 2024 Rent', 'Paid', Colors.green),
-            const Divider(),
-            _buildInvoiceRow('INV-2024-002', 'Sep 2024 Rent', 'Paid', Colors.green),
-            const Divider(),
-            _buildInvoiceRow('INV-2024-003', 'Aug 2024 Rent', 'Paid', Colors.green),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- UPDATED Helper for a single invoice row (now tappable) ---
+  Widget _buildInvoiceRow({required BuildContext context, required Invoice invoice}) {
+    final statusColor = _getStatusColor(invoice.status);
+    final title = invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
+
+    return InkWell(
+      onTap: () {
+        // --- ADD NAVIGATION ---
+        context.go('/invoices/detail', extra: invoice);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          children: [
+            const Icon(Icons.receipt, color: Colors.grey),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                invoice.status,
+                style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInvoiceRow(String invNumber, String title, String status, Color statusColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          const Icon(Icons.receipt, color: Colors.grey, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  invNumber,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  title,
-                  style: const TextStyle(color: Colors.grey, fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(
-                color: statusColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  // --- ADD this helper to home_screen.dart as well ---
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return Colors.green;
+      case 'sent':
+        return Colors.blue;
+      case 'due':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }

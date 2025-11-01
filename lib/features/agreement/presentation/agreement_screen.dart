@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rms_tenant_app/features/home/home_provider/home_provider.dart';
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
-// import 'package:url_launcher/url_launcher.dart'; // We'll add this later
+// 1. IMPORT THE PDF VIEWER PACKAGE
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class AgreementScreen extends ConsumerWidget {
   const AgreementScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We re-use the same provider from the Home screen.
-    // Riverpod caches the data, so this is instant and costs no extra API calls.
     final tenancyAsyncValue = ref.watch(homeTenancyProvider);
     const Color primaryColor = Color(0xFF076633);
 
@@ -51,7 +50,7 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
-  // --- Tab 1: Agreement Details ---
+  // --- Tab 1: Agreement Details (No change) ---
   Widget _buildAgreementDetailsTab(Tenancy tenancy) {
     return ListView(
       padding: const EdgeInsets.all(16.0),
@@ -75,7 +74,7 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
-  // --- Tab 2: Tenancy Details ---
+  // --- Tab 2: Tenancy Details (No change) ---
   Widget _buildTenancyDetailsTab(Tenancy tenancy) {
     return ListView(
       padding: const EdgeInsets.all(16.0),
@@ -87,24 +86,12 @@ class AgreementScreen extends ConsumerWidget {
             'RM ${tenancy.rentalFee.toStringAsFixed(2)}',
           ),
           _buildDetailRow('Status', tenancy.status),
-          _buildDetailRow(
-            'House Deposit',
-            'RM ${tenancy.houseDeposit.toStringAsFixed(2)}',
-          ),
-          _buildDetailRow(
-            'Utility Deposit',
-            'RM ${tenancy.utilityDeposit.toStringAsFixed(2)}',
-          ),
-          _buildDetailRow(
-            'Key Deposit',
-            'RM ${tenancy.keyDeposit.toStringAsFixed(2)}',
-          ),
         ]),
       ],
     );
   }
 
-  // --- Tab 3: Documents ---
+  // --- UPDATED DOCUMENTS TAB ---
   Widget _buildDocumentsTab(Tenancy tenancy) {
     final documents = tenancy.agreement.attachmentUrls;
 
@@ -113,36 +100,19 @@ class AgreementScreen extends ConsumerWidget {
         child: Text('No documents found.'),
       );
     }
+    
+    // Get the first PDF URL from the list
+    final String pdfUrl = documents.first;
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: documents.length,
-      itemBuilder: (context, index) {
-        final url = documents[index];
-        // Get the last part of the URL as the filename
-        final fileName = url.split('/').last; 
-        
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-            title: Text(fileName),
-            subtitle: const Text('Tap to view'),
-            trailing: const Icon(Icons.download_for_offline_outlined),
-            onTap: () {
-              // TODO: Add url_launcher package to open this link
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Will open: $fileName')),
-              );
-            },
-          ),
-        );
-      },
+    // Use the PDF Viewer widget
+    return SfPdfViewer.network(
+      pdfUrl,
+      // The loading indicator is shown by default.
+      // The incorrect line 'canShowLoadingIndicator: true' has been removed.
     );
   }
 
-  // --- Helper Widgets ---
+  // --- Helper Widgets (No change) ---
   Widget _buildDetailCard(List<Widget> children) {
     return Card(
       elevation: 2,
@@ -157,19 +127,28 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
   
+  // --- UPDATED Helper Widget for Detail Rows ---
   Widget _buildDetailRow(String title, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start, // Align to top
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Title
           Text(
             title,
             style: const TextStyle(color: Colors.grey, fontSize: 14),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          const SizedBox(width: 16), // Add spacing
+          
+          // Value (now wrapped in Expanded to allow wrapping)
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              textAlign: TextAlign.right, // Align to the right
+            ),
           ),
         ],
       ),

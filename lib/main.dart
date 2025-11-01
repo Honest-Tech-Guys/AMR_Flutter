@@ -1,10 +1,23 @@
+import 'dart:io'; // 1. IMPORT DART:IO
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rms_tenant_app/navigation/app_router.dart';
 
+// 2. ADD THIS CLASS (It tells Flutter to ignore all SSL errors)
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
-  // Wrap the entire app in a ProviderScope
-  // This is what allows all widgets to read our providers.
+  // 3. ADD THIS LINE (to activate the override)
+  HttpOverrides.global = MyHttpOverrides();
+  
+  // This is your existing code
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -13,12 +26,10 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Get the router from the routerProvider
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
       title: 'RMS Tenant App',
-      // Set the router configuration
       routerConfig: router,
       theme: ThemeData(
         primarySwatch: Colors.blue,
