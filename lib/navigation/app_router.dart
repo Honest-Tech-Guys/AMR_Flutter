@@ -14,6 +14,8 @@ import 'package:rms_tenant_app/features/smart_home/presentation/smart_home_scree
 import 'package:rms_tenant_app/features/notifications/presentation/notification_screen.dart';
 import 'package:rms_tenant_app/shared/models/invoice_model.dart'; // <-- 1. IMPORT MODEL
 import 'package:rms_tenant_app/features/invoices/presentation/invoice_detail_screen.dart'; // <-- 2. IMPORT DETAIL SCREEN
+import 'package:rms_tenant_app/features/smart_home/presentation/smart_lock_detail_screen.dart';
+import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
 
 
 // --- Create a GlobalKey for the shell ---
@@ -84,6 +86,18 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/smart-home',
                 builder: (context, state) => const SmartHomeScreen(),
+                
+                // --- 2. ADD THIS SUB-ROUTE ---
+                routes: [
+                  GoRoute(
+                    path: 'detail', // Full path will be /smart-home/detail
+                    builder: (context, state) {
+                      // Get the SmartLock object we pass to it
+                      final lock = state.extra as SmartLock;
+                      return SmartLockDetailScreen(lock: lock);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
