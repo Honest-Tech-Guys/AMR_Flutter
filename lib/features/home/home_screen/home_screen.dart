@@ -7,6 +7,8 @@ import 'package:rms_tenant_app/features/notifications/notification_provider.dart
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
 import 'package:rms_tenant_app/features/invoices/invoices_provider.dart';
 import 'package:rms_tenant_app/shared/models/invoice_model.dart';
+import 'package:rms_tenant_app/features/smart_home/smart_home_provider.dart';
+import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
 
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -404,6 +406,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             final availableWidth = constraints.maxWidth;
             final itemsPerRow = (availableWidth + spacing) ~/ (itemWidth + spacing);
             
+            final smartLockTile = Expanded(
+              child: Consumer(
+                builder: (context, ref, child) {
+                  // Watch the provider
+                  final smartDeviceAsync = ref.watch(smartDevicesProvider);
+
+                  return _buildQuickAccessTile(
+                    context,
+                    'Smart Lock',
+                    Icons.lock_outline,
+                    '/smart-home', 
+                    onTap: () {
+                      // Handle the async states on tap
+                      smartDeviceAsync.when(
+                        data: (data) {
+                          final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
+                          if (firstLock != null) {
+                            // Navigate to detail screen with the lock object
+                            context.go('/smart-home/detail', extra: firstLock);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No smart lock found!')),
+                            );
+                          }
+                        },
+                        error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not load smart lock: $e')),
+                        ),
+                        loading: () {
+                          // You could show a small spinner, but doing nothing is fine
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            );
+
             if (itemsPerRow >= 3) {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -417,14 +457,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildQuickAccessTile(
-                      context,
-                      'Smart Lock',
-                      Icons.lock_outline,
-                      '/smart-home',
-                    ),
-                  ),
+                  smartLockTile, // Use the consumer-wrapped tile
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildQuickAccessTile(
@@ -449,11 +482,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     '/agreement',
                   ),
                   const SizedBox(width: 16),
-                  _buildQuickAccessTile(
-                    context,
-                    'Smart Lock',
-                    Icons.lock_outline,
-                    '/smart-home',
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final smartDeviceAsync = ref.watch(smartDevicesProvider);
+                      return _buildQuickAccessTile(
+                        context,
+                        'Smart Lock',
+                        Icons.lock_outline,
+                        '/smart-home',
+                        onTap: () {
+                          smartDeviceAsync.when(
+                            data: (data) {
+                              final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
+                              if (firstLock != null) {
+                                context.go('/smart-home/detail', extra: firstLock);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('No smart lock found!')),
+                                );
+                              }
+                            },
+                            error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Could not load smart lock: $e')),
+                            ),
+                            loading: () {},
+                          );
+                        },
+                      );
+                    }
                   ),
                   const SizedBox(width: 16),
                   _buildQuickAccessTile(
@@ -471,7 +527,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildQuickAccessTile(BuildContext context, String title, IconData icon, String route) {
+  Widget _buildQuickAccessTile(
+    BuildContext context, 
+    String title, 
+    IconData icon, 
+    String route,
+    {VoidCallback? onTap}
+  ) {
     const Color primaryColor = Color(0xFF076633);
     
     return ConstrainedBox(
@@ -486,7 +548,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: Colors.white,
           child: InkWell(
-            onTap: () {
+            onTap: onTap ?? () {
               if (route == '/agreement' || route == '/smart-home') {
                 context.go(route);
               } else {
@@ -532,12 +594,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- UPDATED WIDGET FOR LATEST INVOICES ---
-  // --- UPDATED WIDGET FOR LATEST INVOICES ---
   Widget _buildLatestInvoices(BuildContext context) {
     const Color primaryColor = Color(0xFF076633);
     
-    // We will watch the invoices provider here
     return Consumer(
       builder: (context, ref, child) {
         final invoicesAsyncValue = ref.watch(invoicesProvider);
@@ -546,11 +605,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           color: Colors.white,
+          clipBehavior: Clip.antiAlias, // Add this
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                // Title and "See all" button
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -560,7 +619,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     TextButton(
                       onPressed: () {
-                        context.go('/invoices'); // Navigate to Invoices screen
+                        context.go('/invoices');
                       },
                       child: const Text('See all', style: TextStyle(color: primaryColor)),
                     ),
@@ -568,7 +627,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                // Use the provider's state
                 invoicesAsyncValue.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(24.0),
@@ -586,23 +644,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       );
                     }
                     
-                    // Get just the first 3
                     final latestInvoices = invoices.take(3).toList();
                     
-                    // Build the list
                     return ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: latestInvoices.length,
+                      padding: EdgeInsets.zero, // Remove padding
                       itemBuilder: (context, index) {
                         final invoice = latestInvoices[index];
-                        // --- PASS CONTEXT AND INVOICE ---
                         return _buildInvoiceRow(
                           context: context, 
                           invoice: invoice,
                         );
                       },
-                      separatorBuilder: (context, index) => const Divider(),
+                      separatorBuilder: (context, index) => const Divider(
+                        height: 1, // Make divider thinner
+                      ),
                     );
                   },
                 ),
@@ -614,21 +672,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- UPDATED Helper for a single invoice row (now tappable) ---
+  // --- 1. UPDATE THIS WIDGET ---
   Widget _buildInvoiceRow({required BuildContext context, required Invoice invoice}) {
-    final statusColor = _getStatusColor(invoice.status);
+    // --- Logic for status and icon ---
+    final String statusText;
+    final Color statusColor;
+    final IconData iconData;
+
+    if (invoice.isOverdue) {
+      statusText = 'Overdue';
+      statusColor = Colors.red;
+      iconData = Icons.error_outline; // Overdue icon
+    } else {
+      statusText = invoice.status;
+      statusColor = _getStatusColor(invoice.status); // Use original status
+      iconData = Icons.receipt; // Default icon
+    }
+    // --- End of logic ---
+    
     final title = invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
 
     return InkWell(
       onTap: () {
-        // --- ADD NAVIGATION ---
         context.go('/invoices/detail', extra: invoice);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0), // Adjust padding
         child: Row(
           children: [
-            const Icon(Icons.receipt, color: Colors.grey),
+            // --- Use dynamic icon and color ---
+            Icon(iconData, color: statusColor),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -646,7 +719,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                invoice.status,
+                // --- Use dynamic status text ---
+                statusText,
                 style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
@@ -656,7 +730,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- ADD this helper to home_screen.dart as well ---
+  // --- 2. UPDATE THIS HELPER ---
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -664,7 +738,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 'sent':
         return Colors.blue;
       case 'due':
-        return Colors.red;
+        // 'due' (but not overdue) can be orange
+        return Colors.orange; 
       default:
         return Colors.grey;
     }

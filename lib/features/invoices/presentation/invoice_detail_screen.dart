@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. IMPORT RIVERPOD
 import 'package:rms_tenant_app/shared/models/invoice_model.dart';
 
-class InvoiceDetailScreen extends StatelessWidget {
+// 2. CONVERT TO A CONSUMERWIDGET
+class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({required this.invoice, super.key});
 
   final Invoice invoice;
 
+  // 3. UPDATE THE BUILD METHOD SIGNATURE
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const Color primaryColor = Color(0xFF076633);
     final statusColor = _getStatusColor(invoice.status);
+    final isPaid = invoice.status.toLowerCase() == 'paid';
 
     return Scaffold(
       appBar: AppBar(
@@ -19,12 +23,19 @@ class InvoiceDetailScreen extends StatelessWidget {
       ),
       backgroundColor: Colors.grey[100],
       body: ListView(
-        padding: const EdgeInsets.all(16.0),
+        // 4. ADD PADDING TO BOTTOM IF BUTTON IS PRESENT
+        padding: EdgeInsets.fromLTRB(
+          16.0,
+          16.0,
+          16.0,
+          isPaid ? 16.0 : 96.0, // Add extra space for the button
+        ),
         children: [
           // --- Header Card ---
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             color: Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -45,7 +56,8 @@ class InvoiceDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -87,15 +99,20 @@ class InvoiceDetailScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Text('Description', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text('Description',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('Qty x Price', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+                    child: Text('Qty x Price',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.right),
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+                    child: Text('Total',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.right),
                   ),
                 ],
               ),
@@ -107,7 +124,9 @@ class InvoiceDetailScreen extends StatelessWidget {
                 itemCount: invoice.items.length,
                 itemBuilder: (context, index) {
                   final item = invoice.items[index];
-                  final itemTotal = item.quantity * item.unitPrice * (1 + item.taxPercentage / 100);
+                  final itemTotal = item.quantity *
+                      item.unitPrice *
+                      (1 + item.taxPercentage / 100);
                   return Row(
                     children: [
                       Expanded(
@@ -142,12 +161,85 @@ class InvoiceDetailScreen extends StatelessWidget {
           ),
         ],
       ),
+      // --- 5. ADD THE CONDITIONAL PAYMENT BUTTON ---
+      bottomSheet: !isPaid
+          ? Container(
+              color: Colors.grey[100], // Match scaffold bg
+              padding:
+                  const EdgeInsets.only(left: 16, right: 16, bottom: 24, top: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () {
+                    // Use the ref and invoice here
+                    _showConfirmationDialog(context, ref, invoice);
+                  },
+                  child: const Text('Pay Now'),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
-  // --- Helper Widgets ---
+  // --- 6. ADD THIS NEW HELPER METHOD FOR THE DIALOG ---
+  void _showConfirmationDialog(
+      BuildContext context, WidgetRef ref, Invoice invoice) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Payment'),
+          content: Text(
+              'Are you sure you want to pay RM ${invoice.totalAmount.toStringAsFixed(2)} for this invoice?'),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Close the dialog
+              },
+            ),
+            TextButton(
+              child: const Text('Confirm'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Close the dialog
 
-  Widget _buildDetailCard({required String title, required List<Widget> children}) {
+                // --- This is where your API call will go ---
+                // e.g., ref.read(paymentProvider.notifier).pay(invoice.id);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content:
+                        Text('Payment confirmation received. API call pending.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // --- Helper Widgets (No changes below) ---
+
+  Widget _buildDetailCard(
+      {required String title, required List<Widget> children}) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -157,7 +249,9 @@ class InvoiceDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(height: 20),
             ...children,
           ],
@@ -189,7 +283,7 @@ class InvoiceDetailScreen extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildTotalRow(String title, double value, {bool isBold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),

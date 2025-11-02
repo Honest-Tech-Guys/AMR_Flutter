@@ -51,6 +51,31 @@ class Invoice {
     required this.items,
   });
 
+  // --- ADD THIS GETTER ---
+  bool get isOverdue {
+    // If it's already paid, it can't be overdue
+    if (status.toLowerCase() == 'paid') {
+      return false;
+    }
+
+    // Try to parse the due date
+    final due = DateTime.tryParse(dueDate);
+    if (due == null) {
+      return false; // Cannot determine, so not overdue
+    }
+
+    // Get today's date, ignoring time
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // Get due date, ignoring time
+    final dueDateOnly = DateTime(due.year, due.month, due.day);
+
+    // It's overdue if the due date is strictly before today
+    return dueDateOnly.isBefore(today);
+  }
+  // --- END OF ADDITION ---
+
   factory Invoice.fromJson(Map<String, dynamic> json) {
     // Parse the list of items
     final List<dynamic> itemsList = json['items'] ?? [];
