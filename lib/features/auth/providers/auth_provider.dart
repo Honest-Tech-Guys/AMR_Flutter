@@ -3,22 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rms_tenant_app/core/api/api_client.dart';
 
-// Enum to represent our auth state
-enum AuthStatus { signedIn, signedOut, loading }
+// 1. ADD NEW STATE
+enum AuthStatus { signedIn, signedOut, loading, needsVerification }
 
 // --- 1. CORE PROVIDERS ---
 
-// Provider for the secure storage with Android options
-final _storageProvider = Provider((ref) => const FlutterSecureStorage(
-  aOptions: AndroidOptions(
-    encryptedSharedPreferences: true,
-  ),
-));
-
-// Provider for the Dio instance
+final _storageProvider = Provider((ref) => const FlutterSecureStorage());
 final _dioProvider = Provider((ref) => Dio());
 
-// Provider for our ApiClient
 final apiClientProvider = Provider(
   (ref) => ApiClient(
     ref.watch(_dioProvider),
@@ -27,7 +19,6 @@ final apiClientProvider = Provider(
   ),
 );
 
-// Provider for the AuthRepository
 final authRepositoryProvider = Provider(
   (ref) => AuthRepository(
     ref.watch(apiClientProvider),
@@ -36,176 +27,169 @@ final authRepositoryProvider = Provider(
 );
 
 // --- 2. AUTH REPOSITORY ---
-// This class talks to the API and Storage
-
 class AuthRepository {
   final ApiClient _apiClient;
   final FlutterSecureStorage _storage;
   final String _tokenKey = 'auth_token';
+  final String _verifiedKey = 'is_verified'; // <-- NEW
+  final String _emailKey = 'unverified_email'; // <-- NEW
 
   AuthRepository(this._apiClient, this._storage);
 
-  // Read token from storage with error handling
+  // --- Token helpers ---
   Future<String?> _getToken() async {
-    try {
-      return await _storage.read(key: _tokenKey);
-    } catch (e) {
-      // If there's a decryption error, delete the corrupted token
-      print('Error reading token (corrupted data): $e');
-      await _deleteToken();
-      return null;
-    }
+    return await _storage.read(key: _tokenKey);
   }
-
-  // Save token to storage with error handling
   Future<void> _saveToken(String token) async {
-    try {
-      await _storage.write(key: _tokenKey, value: token);
-    } catch (e) {
-      // If write fails, try to delete and write again
-      print('Error saving token: $e');
-      try {
-        await _storage.delete(key: _tokenKey);
-        await _storage.write(key: _tokenKey, value: token);
-      } catch (retryError) {
-        print('Retry save token failed: $retryError');
-        rethrow;
-      }
-    }
+    await _storage.write(key: _tokenKey, value: token);
   }
-
-  // Delete token from storage
   Future<void> _deleteToken() async {
-    try {
-      await _storage.delete(key: _tokenKey);
-    } catch (e) {
-      // If delete fails, try deleteAll
-      print('Error deleting token: $e');
-      try {
-        await _storage.deleteAll();
-      } catch (deleteAllError) {
-        print('Delete all failed: $deleteAllError');
-      }
-    }
+    await _storage.delete(key: _tokenKey);
   }
 
-  // Login function
-  Future<void> login(String email, String password) async {
+  // --- New email/verification helpers ---
+  Future<void> saveUnverifiedEmail(String email) async {
+    await _storage.write(key: _emailKey, value: email);
+  }
+  Future<String?> getUnverifiedEmail() async {
+    return await _storage.read(key: _emailKey);
+  }
+  Future<void> _deleteUnverifiedEmail() async {
+    await _storage.delete(key: _emailKey);
+  }
+  Future<void> _saveVerificationStatus(bool isVerified) async {
+    await _storage.write(key: _verifiedKey, value: isVerified.toString());
+  }
+  Future<bool> isVerified() async {
+    final status = await _storage.read(key: _verifiedKey);
+    return status == 'true';
+  }
+  
+  // --- Updated Login function ---
+  Future<bool> login(String email, String password) async {
     try {
       final response = await _apiClient.post(
         '/login',
-        data: {
-          'email': email,
-          'password': password,
-        },
+        data: {'email': email, 'password': password},
       );
 
       if (response.statusCode == 200 && response.data['token'] != null) {
         final token = response.data['token'] as String;
         await _saveToken(token);
         
-        // Reset 401 counter after successful login
-        _apiClient.reset401Counter();
+        // Check verification status from the response
+        final isVerified = response.data['user']?['email_verified_at'] != null;
+        
+        // Save status for app restarts
+        await _saveVerificationStatus(isVerified); 
+        
+        if (!isVerified) {
+          // Save email to show on verification screen
+          await saveUnverifiedEmail(email); 
+        } else {
+          await _deleteUnverifiedEmail(); // Clean up old email
+        }
+        return isVerified;
       } else {
-        // This is a successful request but bad data
-        throw 'Login successful, but no token was found.';
+        throw 'Invalid response from server';
       }
     } on DioException catch (e) {
-      // Handle API errors (like 401, 404, 500)
-      if (e.response != null) {
-        // Server responded with an error
-        final errorMsg = e.response?.data['message'] ?? 'Server error';
-        throw 'Error: $errorMsg';
-      
-      } else {
-        // Handle network errors (no connection, timeout, etc.)
-        switch (e.type) {
-          case DioExceptionType.connectionTimeout:
-            throw 'Network Error: Connection timed out.';
-          case DioExceptionType.sendTimeout:
-            throw 'Network Error: Request timed out.';
-          case DioExceptionType.receiveTimeout:
-            throw 'Network Error: Response timed out.';
-          case DioExceptionType.connectionError:
-            throw 'Network Error: Connection failed. Check internet or permissions.';
-          case DioExceptionType.unknown:
-            throw 'Network Error: Unknown issue. Check internet or http permissions.';
-          default:
-            throw 'Login failed: ${e.message}';
-        }
-      }
+      throw e.response?.data['message'] ?? 'Login failed';
     } catch (e) {
-      // Catch any other errors
       rethrow;
     }
   }
 
-  // Logout function
+  // --- Updated Logout function ---
   Future<void> logout() async {
-    // Delete the token locally
     await _deleteToken();
-    
-    // Reset 401 counter
-    _apiClient.reset401Counter();
-    
-    // You could also call a '/logout' endpoint if your API has one
-    // try {
-    //   await _apiClient.post('/logout');
-    // } catch (e) {
-    //   // Ignore errors during logout
-    // }
+    await _deleteUnverifiedEmail();
+    await _storage.delete(key: _verifiedKey);
   }
 }
 
-// --- 3. AUTH CONTROLLER ---
-// This is the StateNotifier that our UI will listen to.
-// It manages the *current state* of authentication.
-
+// --- 3. AUTH CONTROLLER (FIXED) ---
 final authControllerProvider =
     AsyncNotifierProvider<AuthController, AuthStatus>(
   () => AuthController(),
 );
 
-// --- 4. REGISTRATION CONTROLLER ---
-final registrationControllerProvider =
-    AsyncNotifierProvider<RegistrationController, bool>(
-  () => RegistrationController(),
-);
-
+// --- THIS IS THE MAIN FIX ---
+// It now correctly extends AsyncNotifier<AuthStatus>
 class AuthController extends AsyncNotifier<AuthStatus> {
   late AuthRepository _authRepository;
 
   @override
   Future<AuthStatus> build() async {
-    _authRepository = ref.watch(authRepositoryProvider);
+    // 'ref' and 'state' are now available
+    _authRepository = ref.watch(authRepositoryProvider); 
 
-    // Check if a token exists when the app starts
     final token = await _authRepository._getToken();
-    
-    if (token != null) {
-      return AuthStatus.signedIn;
+    if (token == null) {
+      return AuthStatus.signedOut;
     }
-    return AuthStatus.signedOut;
+
+    final isVerified = await _authRepository.isVerified();
+    if (isVerified) {
+      return AuthStatus.signedIn;
+    } else {
+      return AuthStatus.needsVerification;
+    }
   }
 
-  // Login method
+  // Updated Login method
   Future<void> login(String email, String password) async {
     state = const AsyncValue.loading();
     try {
-      await _authRepository.login(email, password);
-      state = const AsyncValue.data(AuthStatus.signedIn);
+      final isVerified = await _authRepository.login(email, password);
+      
+      if (isVerified) {
+        state = const AsyncValue.data(AuthStatus.signedIn);
+      } else {
+        state = const AsyncValue.data(AuthStatus.needsVerification);
+      }
     } catch (e, s) {
       state = AsyncValue.error(e, s);
     }
   }
 
-  // Logout method
+  // Updated Logout method
   Future<void> logout() async {
     state = const AsyncValue.loading();
     await _authRepository.logout();
     state = const AsyncValue.data(AuthStatus.signedOut);
   }
 }
+
+// --- 4. NEW: RESEND EMAIL CONTROLLER ---
+final resendEmailProvider = AsyncNotifierProvider<ResendEmailController, void>(
+  () => ResendEmailController(),
+);
+
+class ResendEmailController extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {}
+
+  Future<void> resend() async {
+    state = const AsyncValue.loading();
+    try {
+      final apiClient = ref.watch(apiClientProvider);
+      // ApiClient interceptor adds the token
+      await apiClient.post('/resend-verification-email'); 
+      state = const AsyncValue.data(null);
+    } on DioException catch (e, s) {
+      state = AsyncValue.error(e.response?.data['message'] ?? 'Failed to resend', s);
+    } catch (e, s) {
+      state = AsyncValue.error(e, s);
+    }
+  }
+}
+
+// --- 5. REGISTRATION CONTROLLER (No changes) ---
+final registrationControllerProvider =
+    AsyncNotifierProvider<RegistrationController, bool>(
+  () => RegistrationController(),
+);
 
 class RegistrationController extends AsyncNotifier<bool> {
   @override
@@ -224,8 +208,6 @@ class RegistrationController extends AsyncNotifier<bool> {
     state = const AsyncValue.loading();
     try {
       final apiClient = ref.watch(apiClientProvider);
-
-      // This matches your Next.js 'useRegister' hook
       await apiClient.post(
         '/register',
         data: {
@@ -238,11 +220,9 @@ class RegistrationController extends AsyncNotifier<bool> {
         },
       );
       state = const AsyncValue.data(true);
-      
-    } on DioException catch (e) {
-      // Try to return a helpful error message
+    } on DioException catch (e, s) {
       final errorMsg = e.response?.data?['message'] ?? 'Registration failed';
-      state = AsyncValue.error(errorMsg, e.stackTrace ?? StackTrace.current);
+      state = AsyncValue.error(errorMsg, s);
     } catch (e, s) {
       state = AsyncValue.error(e, s);
     }
