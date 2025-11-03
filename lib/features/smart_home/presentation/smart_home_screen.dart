@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart'; // <-- 1. ADD IMPORT
+import 'package:go_router/go_router.dart';
+import 'package:rms_tenant_app/core/services/url_launcher_service.dart'; // <-- 1. IMPORT HELPER
+import 'package:rms_tenant_app/features/payment/payment_provider.dart'; // <-- 2. IMPORT PROVIDER
 import 'package:rms_tenant_app/features/smart_home/smart_home_provider.dart';
 import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
 
@@ -10,7 +12,6 @@ class SmartHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // ... (build method is the same)
     final devicesAsyncValue = ref.watch(smartDevicesProvider);
     const Color primaryColor = Color(0xFF076633);
 
@@ -46,7 +47,8 @@ class SmartHomeScreen extends ConsumerWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: deviceData.meters.length,
                   itemBuilder: (context, index) {
-                    return _buildMeterCard(context, deviceData.meters[index]);
+                    // --- 3. PASS REF TO CARD ---
+                    return _buildMeterCard(context, deviceData.meters[index], ref);
                   },
                 ),
               
@@ -76,8 +78,8 @@ class SmartHomeScreen extends ConsumerWidget {
     );
   }
 
-  // Helper to build a card for a Smart Meter (No Change)
-  Widget _buildMeterCard(BuildContext context, SmartMeter meter) {
+  // --- 4. UPDATE METER CARD TO ACCEPT REF ---
+  Widget _buildMeterCard(BuildContext context, SmartMeter meter, WidgetRef ref) {
     final isOnline = meter.connectionStatus.toLowerCase() == 'online';
     final isPowerOn = meter.powerStatus.toLowerCase() == 'on';
     const Color primaryColor = Color(0xFF076633);
@@ -138,7 +140,8 @@ class SmartHomeScreen extends ConsumerWidget {
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
-                _showTopUpDialog(context, meter);
+                // --- 5. PASS REF TO DIALOG ---
+                _showTopUpDialog(context, meter, ref);
               },
               child: const Text('Top Up'),
             ),
@@ -148,8 +151,7 @@ class SmartHomeScreen extends ConsumerWidget {
     );
   }
 
-  // --- 2. UPDATED LOCK CARD ---
-  // Helper to build a card for a Smart Lock
+  // (Lock card is unchanged)
   Widget _buildLockCard(BuildContext context, SmartLock lock) {
     const Color primaryColor = Color(0xFF076633);
 
@@ -158,10 +160,8 @@ class SmartHomeScreen extends ConsumerWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: Colors.white,
       margin: const EdgeInsets.symmetric(vertical: 8),
-      // Wrap in InkWell to make it tappable
       child: InkWell(
         onTap: () {
-          // Navigate to the detail screen, passing the lock object
           context.go('/smart-home/detail', extra: lock);
         },
         borderRadius: BorderRadius.circular(12),
@@ -180,7 +180,6 @@ class SmartHomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              // Removed the button, add a chevron to show it's tappable
               const Icon(Icons.chevron_right, color: Colors.grey),
             ],
           ),
@@ -189,7 +188,7 @@ class SmartHomeScreen extends ConsumerWidget {
     );
   }
 
-  // Helper for info columns (No Change)
+  // (Info column is unchanged)
   Widget _buildInfoColumn(String title, String value, {Color? valueColor}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,11 +206,12 @@ class SmartHomeScreen extends ConsumerWidget {
     );
   }
 
-  // Top-up Dialog (No Change)
-  void _showTopUpDialog(BuildContext context, SmartMeter meter) {
+  // --- 6. UPDATE TOP-UP DIALOG TO ACCEPT/USE REF ---
+  void _showTopUpDialog(BuildContext context, SmartMeter meter, WidgetRef ref) {
     final formKey = GlobalKey<FormState>();
     final unitController = TextEditingController();
     String calculatedPrice = "0.00";
+    bool _isPaying = false; // Local state for loading
     const Color primaryColor = Color(0xFF076633);
 
     showDialog(
@@ -276,27 +276,52 @@ class SmartHomeScreen extends ConsumerWidget {
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text("Cancel"),
                 ),
+                
+                // --- 7. UPDATE BUTTON LOGIC ---
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: () {
+                  onPressed: _isPaying ? null : () async {
                     if (formKey.currentState!.validate()) {
-                      // TODO: Call your top-up API here
-                      print(
-                        "Top-up Confirmed: ${unitController.text} units for RM $calculatedPrice",
-                      );
-                      Navigator.of(context).pop(); 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Top-up request sent!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      setState(() { _isPaying = true; }); // Start loading
+                      
+                      final double amount = double.parse(calculatedPrice);
+                      
+                      final url = await ref
+                          .read(paymentProvider.notifier)
+                          .generatePaymentLink(
+                            payableType: 'meter',
+                            payableId: meter.id,
+                            amount: amount,
+                          );
+                      
+                      setState(() { _isPaying = false; }); // Stop loading
+                      
+                      if (url != null && context.mounted) {
+                        Navigator.of(context).pop(); // Close dialog
+                        launchUrlHelper(context, url); // Launch payment link
+                      } else {
+                        // Handle error, e.g., show snackbar
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to generate payment link.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
                     }
                   },
-                  child: const Text("Confirm Top-up"),
+                  child: _isPaying
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text("Confirm Top-up"),
                 )
               ],
             );

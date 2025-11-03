@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:rms_tenant_app/features/auth/presentation/login_screen.dart';
 import 'package:rms_tenant_app/features/auth/presentation/registration_screen.dart';
-// --- 1. IMPORT THE NEW SCREEN ---
 import 'package:rms_tenant_app/features/auth/presentation/verification_screen.dart';
 import 'package:rms_tenant_app/features/auth/providers/auth_provider.dart';
 import 'package:rms_tenant_app/features/home/home_screen/home_screen.dart';
@@ -28,9 +27,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
     
-    // --- 2. THE `refreshListenable` LINE IS REMOVED ---
-    // The `redirect` block below already `watch`es authState,
-    // so this is not needed and was causing the error.
+    // --- THIS IS THE FIX ---
+    // The `refreshListenable` line is removed.
+    // The `redirect` block below already `watch`es authState.
 
     routes: [
       GoRoute(
@@ -41,7 +40,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         builder: (context, state) => const RegistrationScreen(),
       ),
-      // --- 3. ADD THE NEW VERIFICATION ROUTE ---
       GoRoute(
         path: '/verify',
         builder: (context, state) => const VerificationScreen(),
@@ -122,7 +120,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
 
-    // --- 4. UPDATED REDIRECT LOGIC ---
+    // --- UPDATED REDIRECT LOGIC ---
     redirect: (context, state) {
       final status = authState.asData?.value;
       
@@ -137,22 +135,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 1. User is logged out
       if (status == AuthStatus.signedOut) {
-        // If they are on an auth page, let them stay.
-        // Otherwise, send to login.
         return isAuthPage ? null : '/login';
       }
     
       // 2. User needs verification
       if (status == AuthStatus.needsVerification) {
-        // If they are on the verify page, let them stay.
-        // Otherwise, send to verify.
         return isVerifyPage ? null : '/verify';
       }
     
       // 3. User is signed in (and verified)
       if (status == AuthStatus.signedIn) {
-        // If they are on an auth or verify page, send them home.
-        // Otherwise, let them go where they want.
         return (isAuthPage || isVerifyPage) ? '/' : null;
       }
 

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. IMPORT RIVERPOD
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rms_tenant_app/shared/models/invoice_model.dart';
+// --- 1. ADD THESE IMPORTS ---
+import 'package:rms_tenant_app/core/services/url_launcher_service.dart';
+import 'package:rms_tenant_app/features/payment/payment_provider.dart';
 
-// 2. CONVERT TO A CONSUMERWIDGET
 class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({required this.invoice, super.key});
 
   final Invoice invoice;
 
-  // 3. UPDATE THE BUILD METHOD SIGNATURE
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     const Color primaryColor = Color(0xFF076633);
@@ -23,7 +24,6 @@ class InvoiceDetailScreen extends ConsumerWidget {
       ),
       backgroundColor: Colors.grey[100],
       body: ListView(
-        // 4. ADD PADDING TO BOTTOM IF BUTTON IS PRESENT
         padding: EdgeInsets.fromLTRB(
           16.0,
           16.0,
@@ -161,7 +161,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
           ),
         ],
       ),
-      // --- 5. ADD THE CONDITIONAL PAYMENT BUTTON ---
+      // --- Floating "Pay Now" Button ---
       bottomSheet: !isPaid
           ? Container(
               color: Colors.grey[100], // Match scaffold bg
@@ -169,24 +169,41 @@ class InvoiceDetailScreen extends ConsumerWidget {
                   const EdgeInsets.only(left: 16, right: 16, bottom: 24, top: 8),
               child: SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () {
-                    // Use the ref and invoice here
-                    _showConfirmationDialog(context, ref, invoice);
+                // --- 2. WATCH THE PAYMENT PROVIDER FOR LOADING STATE ---
+                child: Consumer(
+                  builder: (context, ref, child) {
+                    final paymentState = ref.watch(paymentProvider);
+                    
+                    return ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // Disable button while loading
+                      onPressed: paymentState.isLoading ? null : () {
+                        // Call the confirmation dialog
+                        _showConfirmationDialog(context, ref, invoice);
+                      },
+                      child: paymentState.isLoading
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : const Text('Pay Now'),
+                    );
                   },
-                  child: const Text('Pay Now'),
                 ),
               ),
             )
@@ -194,7 +211,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
     );
   }
 
-  // --- 6. ADD THIS NEW HELPER METHOD FOR THE DIALOG ---
+  // --- 3. UPDATED CONFIRMATION DIALOG ---
   void _showConfirmationDialog(
       BuildContext context, WidgetRef ref, Invoice invoice) {
     showDialog(
@@ -215,19 +232,29 @@ class InvoiceDetailScreen extends ConsumerWidget {
             ),
             TextButton(
               child: const Text('Confirm'),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(dialogContext).pop(); // Close the dialog
 
-                // --- This is where your API call will go ---
-                // e.g., ref.read(paymentProvider.notifier).pay(invoice.id);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content:
-                        Text('Payment confirmation received. API call pending.'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                // --- THIS IS THE PAYMENT LOGIC ---
+                final url = await ref
+                    .read(paymentProvider.notifier)
+                    .generatePaymentLink(
+                      payableType: 'invoice',
+                      payableId: invoice.id,
+                    );
+                
+                // If successful, launch the URL
+                if (url != null && context.mounted) {
+                  launchUrlHelper(context, url);
+                } else if (context.mounted) {
+                  // If it fails, show an error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ref.read(paymentProvider).error.toString()),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
             ),
           ],

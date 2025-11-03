@@ -8,7 +8,13 @@ enum AuthStatus { signedIn, signedOut, loading, needsVerification }
 
 // --- 1. CORE PROVIDERS ---
 
-final _storageProvider = Provider((ref) => const FlutterSecureStorage());
+// Provider for the secure storage with your Android options
+final _storageProvider = Provider((ref) => const FlutterSecureStorage(
+  aOptions: AndroidOptions(
+    encryptedSharedPreferences: true,
+  ),
+));
+
 final _dioProvider = Provider((ref) => Dio());
 
 final apiClientProvider = Provider(
@@ -26,25 +32,46 @@ final authRepositoryProvider = Provider(
   ),
 );
 
-// --- 2. AUTH REPOSITORY ---
+// --- 2. AUTH REPOSITORY (with verification logic) ---
 class AuthRepository {
   final ApiClient _apiClient;
   final FlutterSecureStorage _storage;
   final String _tokenKey = 'auth_token';
-  final String _verifiedKey = 'is_verified'; // <-- NEW
-  final String _emailKey = 'unverified_email'; // <-- NEW
+  final String _verifiedKey = 'is_verified';
+  final String _emailKey = 'unverified_email';
 
   AuthRepository(this._apiClient, this._storage);
 
-  // --- Token helpers ---
+  // --- Token helpers from your file ---
   Future<String?> _getToken() async {
-    return await _storage.read(key: _tokenKey);
+    try {
+      return await _storage.read(key: _tokenKey);
+    } catch (e) {
+      print('Error reading token (corrupted data): $e');
+      await _deleteToken();
+      return null;
+    }
   }
   Future<void> _saveToken(String token) async {
-    await _storage.write(key: _tokenKey, value: token);
+    try {
+      await _storage.write(key: _tokenKey, value: token);
+    } catch (e) {
+      print('Error saving token: $e');
+      try {
+        await _storage.delete(key: _tokenKey);
+        await _storage.write(key: _tokenKey, value: token);
+      } catch (retryError) {
+        print('Retry save token failed: $retryError');
+        rethrow;
+      }
+    }
   }
   Future<void> _deleteToken() async {
-    await _storage.delete(key: _tokenKey);
+    try {
+      await _storage.delete(key: _tokenKey);
+    } catch (e) {
+      print('Error deleting token: $e');
+    }
   }
 
   // --- New email/verification helpers ---
@@ -77,17 +104,13 @@ class AuthRepository {
         final token = response.data['token'] as String;
         await _saveToken(token);
         
-        // Check verification status from the response
         final isVerified = response.data['user']?['email_verified_at'] != null;
-        
-        // Save status for app restarts
         await _saveVerificationStatus(isVerified); 
         
         if (!isVerified) {
-          // Save email to show on verification screen
           await saveUnverifiedEmail(email); 
         } else {
-          await _deleteUnverifiedEmail(); // Clean up old email
+          await _deleteUnverifiedEmail();
         }
         return isVerified;
       } else {
@@ -114,14 +137,12 @@ final authControllerProvider =
   () => AuthController(),
 );
 
-// --- THIS IS THE MAIN FIX ---
-// It now correctly extends AsyncNotifier<AuthStatus>
+// --- THIS IS THE COMPILER FIX ---
 class AuthController extends AsyncNotifier<AuthStatus> {
   late AuthRepository _authRepository;
 
   @override
   Future<AuthStatus> build() async {
-    // 'ref' and 'state' are now available
     _authRepository = ref.watch(authRepositoryProvider); 
 
     final token = await _authRepository._getToken();
@@ -137,7 +158,6 @@ class AuthController extends AsyncNotifier<AuthStatus> {
     }
   }
 
-  // Updated Login method
   Future<void> login(String email, String password) async {
     state = const AsyncValue.loading();
     try {
@@ -153,7 +173,6 @@ class AuthController extends AsyncNotifier<AuthStatus> {
     }
   }
 
-  // Updated Logout method
   Future<void> logout() async {
     state = const AsyncValue.loading();
     await _authRepository.logout();
@@ -161,7 +180,7 @@ class AuthController extends AsyncNotifier<AuthStatus> {
   }
 }
 
-// --- 4. NEW: RESEND EMAIL CONTROLLER ---
+// --- 4. RESEND EMAIL CONTROLLER ---
 final resendEmailProvider = AsyncNotifierProvider<ResendEmailController, void>(
   () => ResendEmailController(),
 );
@@ -174,7 +193,6 @@ class ResendEmailController extends AsyncNotifier<void> {
     state = const AsyncValue.loading();
     try {
       final apiClient = ref.watch(apiClientProvider);
-      // ApiClient interceptor adds the token
       await apiClient.post('/resend-verification-email'); 
       state = const AsyncValue.data(null);
     } on DioException catch (e, s) {
@@ -185,7 +203,7 @@ class ResendEmailController extends AsyncNotifier<void> {
   }
 }
 
-// --- 5. REGISTRATION CONTROLLER (No changes) ---
+// --- 5. REGISTRATION CONTROLLER ---
 final registrationControllerProvider =
     AsyncNotifierProvider<RegistrationController, bool>(
   () => RegistrationController(),

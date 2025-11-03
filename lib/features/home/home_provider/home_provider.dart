@@ -1,48 +1,44 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rms_tenant_app/features/auth/providers/auth_provider.dart';
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
 
-// Use autoDispose to prevent caching stale data
 final homeTenancyProvider = FutureProvider.autoDispose<Tenancy>((ref) async {
   final apiClient = ref.watch(apiClientProvider);
   
-  // Listen to auth state changes - if signed out, throw immediately
+  // This line is from your old file and is a good optimization.
   final authState = ref.watch(authControllerProvider);
-  
-  // If user is not signed in, throw an error immediately
-  if (authState.value == AuthStatus.signedOut) {
-    throw 'User is not authenticated. Please login again.';
+  if (authState.asData?.value == AuthStatus.signedOut) {
+    throw 'User is not authenticated.';
   }
 
   try {
     final response = await apiClient.get('/tenancy');
 
-    // The API returns an object under 'data', not a list.
-    if (response.statusCode == 200 && response.data['data'] != null) {
-      
-      final Map<String, dynamic> tenancyData = response.data['data'];
-      
-      if (tenancyData.isNotEmpty) {
-        // Convert the JSON object to our Tenancy model
-        return Tenancy.fromJson(tenancyData);
-      } else {
-        throw 'No active tenancy found for this user.';
-      }
+    // --- THIS IS THE FIX ---
+    // Check if the 'data' key is null (our fake 401 response)
+    if (response.data['data'] == null) {
+      // The user is being logged out. We stay in a "pending"
+      // state to let the router redirect without a crash.
+      return Completer<Tenancy>().future;
+    }
+    // ----------------------
+
+    // If data is not null, proceed as normal
+    final Map<String, dynamic> tenancyData = response.data['data'];
+    if (tenancyData.isNotEmpty) {
+      return Tenancy.fromJson(tenancyData);
     } else {
-      throw 'Failed to load tenancy data';
+      throw 'No active tenancy found for this user.';
     }
+
   } on DioException catch (e) {
-    // Handle 401 specifically - don't retry, throw immediately
     if (e.response?.statusCode == 401) {
-      // The ApiClient interceptor will handle logout automatically
-      throw 'Authentication failed. Redirecting to login...';
+      throw 'Authentication failed. Redirecting...';
     }
-    
-    // Handle other errors
-    final errorMsg = e.response?.data?['message'] ?? e.message ?? 'Unknown error';
-    throw 'Error fetching tenancy: $errorMsg';
+    throw 'Error fetching tenancy: ${e.message}';
   } catch (e) {
-    throw 'Error fetching tenancy: $e';
+    throw e.toString();
   }
 });
