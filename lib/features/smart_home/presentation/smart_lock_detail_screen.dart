@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
+import 'package:ttlock_flutter/ttlock.dart';
 
 class SmartLockDetailScreen extends StatefulWidget {
   const SmartLockDetailScreen({required this.lock, super.key});
@@ -13,7 +14,172 @@ class SmartLockDetailScreen extends StatefulWidget {
 class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
   bool _isLocked = true;
   bool _isUnlocking = false;
+  bool _isProcessing = false;
+  String? _errorMessage;
+  
+  // Bluetooth state
+  TTBluetoothState _bluetoothState = TTBluetoothState.unknown;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkBluetoothState();
+  }
+
+  // Check if Bluetooth is enabled
+  void _checkBluetoothState() {
+    TTLock.getBluetoothState((state) {
+      setState(() {
+        _bluetoothState = state;
+      });
+      
+      if (state != TTBluetoothState.turnOn) {
+        setState(() {
+          _errorMessage = 'Please enable Bluetooth to control the lock';
+        });
+      }
+    });
+  }
+
+  // Check if lock data is available
+  bool get _hasLockData => widget.lock.lockData != null && widget.lock.lockData!.isNotEmpty;
+
+  // Unlock the door using TTLock SDK
+  void _unlockDoor() {
+    if (!_hasLockData) {
+      _showError('Lock data not available. Please contact support.');
+      return;
+    }
+
+    if (_bluetoothState != TTBluetoothState.turnOn) {
+      _showError('Bluetooth is not enabled. Please turn on Bluetooth.');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    TTLock.controlLock(
+      widget.lock.lockData!,
+      TTControlAction.unlock,
+      (lockTime, electricQuantity, uniqueId, lockData) {
+        // Success callback
+        if (mounted) {
+          setState(() {
+            _isLocked = false;
+            _isProcessing = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔓 Door unlocked successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      (error, message) {
+        // Error callback
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+          
+          _showError('Failed to unlock: ${_getErrorMessage(error, message)}');
+        }
+      },
+    );
+  }
+
+  // Lock the door using TTLock SDK
+  void _lockDoor() {
+    if (!_hasLockData) {
+      _showError('Lock data not available. Please contact support.');
+      return;
+    }
+
+    if (_bluetoothState != TTBluetoothState.turnOn) {
+      _showError('Bluetooth is not enabled. Please turn on Bluetooth.');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    TTLock.controlLock(
+      widget.lock.lockData!,
+      TTControlAction.lock,
+      (lockTime, electricQuantity, uniqueId, lockData) {
+        // Success callback
+        if (mounted) {
+          setState(() {
+            _isLocked = true;
+            _isProcessing = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔒 Door locked successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      (error, message) {
+        // Error callback
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+          
+          _showError('Failed to lock: ${_getErrorMessage(error, message)}');
+        }
+      },
+    );
+  }
+
+  // Show error message
+  void _showError(String message) {
+    setState(() {
+      _errorMessage = message;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  // Convert TTLock error to user-friendly message
+  String _getErrorMessage(TTLockError error, String originalMessage) {
+    switch (error) {
+      case TTLockError.bluetoothOff:
+        return 'Bluetooth is turned off';
+      case TTLockError.bluetoothConnectTimeout:
+        return 'Could not connect to lock. Please try again.';
+      case TTLockError.bluetoothDisconnection:
+        return 'Lost connection to lock';
+      case TTLockError.lockIsBusy:
+        return 'Lock is busy. Please wait and try again.';
+      case TTLockError.noPower:
+        return 'Lock battery is too low';
+      case TTLockError.noPermission:
+        return 'You do not have permission to control this lock';
+      default:
+        return originalMessage.isNotEmpty ? originalMessage : 'An error occurred';
+    }
+  }
+
+  // Handle long press to unlock
   void _startUnlock() async {
     setState(() {
       _isUnlocking = true;
@@ -22,17 +188,13 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
     // Simulate hold for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
     
+    if (_isUnlocking && mounted) {
+      _unlockDoor();
+    }
+    
     setState(() {
-      _isLocked = false;
       _isUnlocking = false;
     });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Door unlocked'),
-        duration: Duration(seconds: 1),
-      ),
-    );
   }
 
   void _cancelUnlock() {
@@ -41,25 +203,13 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
     });
   }
 
-  void _lockDoor() {
-    setState(() {
-      _isLocked = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Door locked'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFF076633);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Smart Lock'),
+        title: Text(widget.lock.lockName ?? 'Smart Lock'),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -73,10 +223,10 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
-              // Device Name and Serial Number
+              // Lock Info
               Text(
-                widget.lock.serialNumber,
-                style: TextStyle(
+                widget.lock.lockName ?? widget.lock.serialNumber,
+                style: const TextStyle(
                   fontSize: 18,
                   color: primaryColor,
                   fontWeight: FontWeight.w500,
@@ -84,12 +234,88 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Serial Number: ${widget.lock.serialNumber ?? "123S102323"}',
+                'Serial: ${widget.lock.serialNumber}',
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.grey[600],
                 ),
               ),
+              
+              // Battery indicator (if available)
+              if (widget.lock.electricQuantity != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.battery_std,
+                      size: 20,
+                      color: widget.lock.electricQuantity! > 20 
+                          ? Colors.green 
+                          : Colors.red,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${widget.lock.electricQuantity}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              // Bluetooth status warning
+              if (_bluetoothState != TTBluetoothState.turnOn) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bluetooth_disabled, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Bluetooth is ${_bluetoothState == TTBluetoothState.turnOff ? "off" : "unavailable"}',
+                          style: const TextStyle(color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Lock data warning
+              if (!_hasLockData) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Lock not initialized. Please contact support.',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 32),
 
               // Lock Status Circle
@@ -99,9 +325,13 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
 
               // Instruction Text
               Text(
-                _isUnlocking 
-                    ? 'Hold to unlock...' 
-                    : 'You need to on hold for a\nseconds to unlock the door',
+                _isProcessing
+                    ? 'Communicating with lock...'
+                    : _isUnlocking 
+                        ? 'Hold to unlock...' 
+                        : _isLocked
+                            ? 'Long press to unlock\nTap to lock'
+                            : 'Tap to lock the door',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -109,6 +339,23 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
                   height: 1.5,
                 ),
               ),
+
+              // Error message
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
               
               const SizedBox(height: 40),
 
@@ -136,9 +383,13 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
   }
 
   Widget _buildLockStatusCircle(Color primaryColor) {
+    final bool isDisabled = !_hasLockData || 
+                            _bluetoothState != TTBluetoothState.turnOn || 
+                            _isProcessing;
+
     return GestureDetector(
       onLongPressStart: (_) {
-        if (_isLocked) {
+        if (!isDisabled && _isLocked) {
           _startUnlock();
         }
       },
@@ -148,7 +399,7 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
         }
       },
       onTap: () {
-        if (!_isLocked) {
+        if (!isDisabled && !_isLocked) {
           _lockDoor();
         }
       },
@@ -158,18 +409,20 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
-            color: Colors.grey[300]!,
+            color: isDisabled ? Colors.grey[400]! : Colors.grey[300]!,
             width: 8,
           ),
         ),
         child: Stack(
           children: [
-            // Progress indicator for unlocking
-            if (_isUnlocking)
+            // Progress indicator
+            if (_isUnlocking || _isProcessing)
               Positioned.fill(
                 child: CircularProgressIndicator(
                   strokeWidth: 8,
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isDisabled ? Colors.grey : primaryColor,
+                  ),
                 ),
               ),
             
@@ -179,7 +432,7 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: primaryColor,
+                  color: isDisabled ? Colors.grey : primaryColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -209,7 +462,6 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
   }
 
   Widget _buildQuickAccessCard(String title, IconData icon, Color primaryColor) {
-    // Calculate width for 2 columns with spacing
     final double cardWidth = (MediaQuery.of(context).size.width - 72) / 2;
     
     return GestureDetector(
@@ -236,11 +488,7 @@ class _SmartLockDetailScreenState extends State<SmartLockDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: primaryColor,
-              size: 32,
-            ),
+            Icon(icon, color: primaryColor, size: 32),
             const SizedBox(height: 12),
             Text(
               title,

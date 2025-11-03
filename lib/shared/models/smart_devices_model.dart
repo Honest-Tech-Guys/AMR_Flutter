@@ -31,7 +31,7 @@ class SmartMeter {
   final String connectionStatus;
   final String powerStatus;
   final double unitPrice;
-  final int minimumTopupUnit; // <-- THIS FIELD IS NEW
+  final int minimumTopupUnit;
 
   SmartMeter({
     required this.id,
@@ -40,7 +40,7 @@ class SmartMeter {
     required this.connectionStatus,
     required this.powerStatus,
     required this.unitPrice,
-    required this.minimumTopupUnit, // <-- ADDED
+    required this.minimumTopupUnit,
   });
 
   factory SmartMeter.fromJson(Map<String, dynamic> json) {
@@ -51,25 +51,37 @@ class SmartMeter {
       connectionStatus: json['connection_status'] ?? 'unknown',
       powerStatus: json['power_status'] ?? 'unknown',
       unitPrice: double.tryParse(json['unit_price_per_unit'].toString()) ?? 0.0,
-      minimumTopupUnit: json['minimum_topup_unit'] ?? 10, // <-- ADDED
+      minimumTopupUnit: json['minimum_topup_unit'] ?? 10,
     );
   }
 }
 
-// Model for a single SmartLock
+// UPDATED Model for a single SmartLock
 class SmartLock {
   final int id;
   final String serialNumber;
+  final String? lockData;        // NEW: TTLock SDK data
+  final String? lockMac;         // NEW: Bluetooth MAC address
+  final String? lockName;        // NEW: Display name
+  final int? electricQuantity;   // NEW: Battery level
 
   SmartLock({
     required this.id,
     required this.serialNumber,
+    this.lockData,
+    this.lockMac,
+    this.lockName,
+    this.electricQuantity,
   });
 
   factory SmartLock.fromJson(Map<String, dynamic> json) {
     return SmartLock(
       id: json['id'],
       serialNumber: json['serial_number'] ?? 'N/A',
+      lockData: json['lock_data'],              // NEW
+      lockMac: json['lock_mac'],                // NEW
+      lockName: json['lock_name'],              // NEW
+      electricQuantity: json['electric_quantity'], // NEW
     );
   }
 }

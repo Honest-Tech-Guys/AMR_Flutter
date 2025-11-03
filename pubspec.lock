@@ -773,6 +773,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.11"
+  ttlock_flutter:
+    dependency: "direct main"
+    description:
+      name: ttlock_flutter
+      sha256: b89684c06b9608d7e3c9ffa09777bc316ecd0486cd1887d489397e4c70442b10
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.8"
   typed_data:
     dependency: transitive
     description:
