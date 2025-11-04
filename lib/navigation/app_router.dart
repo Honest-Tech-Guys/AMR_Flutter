@@ -16,6 +16,8 @@ import 'package:rms_tenant_app/features/invoices/presentation/invoice_detail_scr
 import 'package:rms_tenant_app/shared/models/invoice_model.dart';
 import 'package:rms_tenant_app/features/smart_home/presentation/smart_lock_detail_screen.dart';
 import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
+import 'package:rms_tenant_app/features/smart_home/presentation/add_smart_lock_screen.dart';
+
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -93,6 +95,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                       final lock = state.extra as SmartLock;
                       return SmartLockDetailScreen(lock: lock);
                     },
+                  ),
+                  // Add this new route
+                  GoRoute(
+                    path: 'add-lock',
+                    builder: (context, state) => const AddSmartLockScreen(),
                   ),
                 ],
               ),

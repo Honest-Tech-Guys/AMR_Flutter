@@ -20,6 +20,16 @@ class SmartHomeScreen extends ConsumerWidget {
         title: const Text('Smart Home'),
         backgroundColor: Colors.white,
         elevation: 1,
+        actions: [
+          // Add Smart Lock button in AppBar
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: 'Add Smart Lock',
+            onPressed: () {
+              context.push('/smart-home/add-lock');
+            },
+          ),
+        ],
       ),
       backgroundColor: Colors.grey[100],
       body: devicesAsyncValue.when(
@@ -33,6 +43,34 @@ class SmartHomeScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
+              // // Add Lock Button at top
+              // SizedBox(
+              //   width: double.infinity,
+              //   child: ElevatedButton.icon(
+              //     style: ElevatedButton.styleFrom(
+              //       backgroundColor: primaryColor,
+              //       foregroundColor: Colors.white,
+              //       padding: const EdgeInsets.symmetric(vertical: 14),
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(12),
+              //       ),
+              //     ),
+              //     icon: const Icon(Icons.add),
+              //     label: const Text(
+              //       'Add Smart Lock',
+              //       style: TextStyle(
+              //         fontSize: 16,
+              //         fontWeight: FontWeight.w600,
+              //       ),
+              //     ),
+              //     onPressed: () {
+              //       context.push('/smart-home/add-lock');
+              //     },
+              //   ),
+              // ),
+              
+              // const SizedBox(height: 24),
+              
               // --- Smart Meters Section ---
               const Text(
                 'Smart Meters',
@@ -47,7 +85,6 @@ class SmartHomeScreen extends ConsumerWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: deviceData.meters.length,
                   itemBuilder: (context, index) {
-                    // --- 3. PASS REF TO CARD ---
                     return _buildMeterCard(context, deviceData.meters[index], ref);
                   },
                 ),
@@ -61,7 +98,36 @@ class SmartHomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               if (deviceData.locks.isEmpty)
-                const Text('No smart locks found.')
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No smart locks found.',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap "Add Smart Lock" to get started',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               else
                 ListView.builder(
                   shrinkWrap: true,
