@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:rms_tenant_app/features/auth/providers/auth_provider.dart';
+
+// --- 1. IMPORT THE EXCEPTION FROM YOUR PROVIDER FILE ---
 import 'package:rms_tenant_app/features/home/home_provider/home_provider.dart';
+
 import 'package:rms_tenant_app/features/notifications/notification_provider.dart';
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
 import 'package:rms_tenant_app/features/invoices/invoices_provider.dart';
@@ -10,9 +13,11 @@ import 'package:rms_tenant_app/shared/models/invoice_model.dart';
 import 'package:rms_tenant_app/features/smart_home/smart_home_provider.dart';
 import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
 
-
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  // --- ADDED STATIC ROUTE (from your router file) ---
+  static const route = '/';
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -21,20 +26,40 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _hasShownAuthError = false;
 
+  // Pull-to-refresh handler (Unchanged)
+  Future<void> _handleRefresh() async {
+    // Invalidate all providers to trigger refresh
+    ref.invalidate(homeTenancyProvider);
+    ref.invalidate(invoicesProvider);
+    ref.invalidate(notificationProvider);
+    ref.invalidate(smartDevicesProvider);
+
+    // Wait for the tenancy provider to complete loading
+    // We wrap this in a try-catch to prevent an unhandled exception
+    // if the refresh itself fails (e.g., NoActiveTenancyException)
+    try {
+      await ref.read(homeTenancyProvider.future);
+    } catch (e) {
+      // Absorb the error, the provider's error state
+      // will be handled by the .when() block in build()
+      print('Refresh error caught: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Watch auth state to catch logout
+    // Watch auth state to catch logout (Unchanged)
     final authState = ref.watch(authControllerProvider);
-    
-    // Listen to auth state changes for auto-redirect
+
+    // Listen to auth state changes for auto-redirect (Unchanged)
     ref.listen(authControllerProvider, (previous, next) {
       // If auth state changes to signed out, router will handle redirect
       if (next.value == AuthStatus.signedOut) {
         print('Auth state changed to signed out - router will redirect');
       }
     });
-    
-    // If signed out, show a brief message (router will redirect)
+
+    // If signed out, show a brief message (router will redirect) (Unchanged)
     if (authState.value == AuthStatus.signedOut) {
       return Scaffold(
         body: const Center(
@@ -55,6 +80,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return tenancyAsyncValue.when(
       data: (tenancy) {
+        // (Unchanged)
         _hasShownAuthError = false; // Reset flag on success
         final String tenantName = tenancy.agreement.tenantName;
 
@@ -104,34 +130,116 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           backgroundColor: Colors.grey[100],
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  _buildMyUnitCard(context, tenancy),
-                  const SizedBox(height: 24),
-                  _buildQuickAccess(context),
-                  const SizedBox(height: 24),
-                  _buildLatestInvoices(context),
-                  const SizedBox(height: 24),
-                ],
+            child: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: primaryColor,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    _buildMyUnitCard(context, tenancy),
+                    const SizedBox(height: 24),
+                    _buildQuickAccess(context),
+                    const SizedBox(height: 24),
+                    _buildLatestInvoices(context),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           ),
         );
       },
-      
+
+      // --- 2. THIS IS THE UPDATED ERROR BLOCK ---
       error: (error, stackTrace) {
-        // Check if it's an auth error
-        final isAuthError = error.toString().contains('Authentication') || 
-                           error.toString().contains('authenticated') ||
-                           error.toString().contains('401') ||
-                           error.toString().contains('Redirecting');
-        
+        // --- FIRST, CHECK FOR OUR CUSTOM EXCEPTION ---
+        if (error is NoActiveTenancyException) {
+          // This is our "empty state" UI
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text(
+                'Home',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.black,
+                ),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 1,
+              titleSpacing: 16,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout, color: Colors.black),
+                  onPressed: () {
+                    ref.read(authControllerProvider.notifier).logout();
+                  },
+                ),
+                const SizedBox(width: 10),
+              ],
+            ),
+            backgroundColor: Colors.grey[100],
+            body: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: primaryColor,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                // This ensures content is centered and scrollable
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: MediaQuery.of(context).size.height - 150, // Fill viewport
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.home_work_outlined,
+                            size: 64,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Active Tenancy',
+                            style: const TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            error.message, // "No active tenancy found."
+                            style: const TextStyle(color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            'Pull down to refresh.',
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        // --- IF NOT, RUN YOUR ORIGINAL AUTH ERROR LOGIC ---
+        final isAuthError = error.toString().contains('Authentication') ||
+            error.toString().contains('authenticated') ||
+            error.toString().contains('401') ||
+            error.toString().contains('Redirecting');
+
         // Auto-logout on auth error (only once to prevent loops)
         if (isAuthError && !_hasShownAuthError) {
           _hasShownAuthError = true;
-          
+
           // Schedule logout after this frame
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -140,7 +248,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             }
           });
         }
-        
+
+        // --- THEN, SHOW YOUR ORIGINAL ERROR SCREEN ---
         return Scaffold(
           appBar: AppBar(
             title: const Text('Error'),
@@ -158,9 +267,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    isAuthError 
-                      ? 'Authentication Error' 
-                      : 'Could not load home screen',
+                    isAuthError
+                        ? 'Authentication Error'
+                        : 'Could not load home screen',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -169,8 +278,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 8),
                   Text(
                     isAuthError
-                      ? 'Your session has expired. Redirecting to login...'
-                      : error.toString(),
+                        ? 'Your session has expired. Redirecting to login...'
+                        : error.toString(),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.grey),
                   ),
@@ -192,7 +301,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         );
       },
-      
+
+      // --- (Unchanged) ---
       loading: () {
         return Scaffold(
           appBar: AppBar(
@@ -210,16 +320,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // --- ALL YOUR HELPER WIDGETS (Unchanged) ---
+
   Widget _buildMyUnitCard(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
-    
-    final DateTime endDate = DateTime.tryParse(tenancy.agreement.endDate) ?? DateTime.now();
+
+    final DateTime endDate =
+        DateTime.tryParse(tenancy.agreement.endDate) ?? DateTime.now();
     final DateTime today = DateTime.now();
     final int remainingDays = endDate.difference(today).inDays;
-    
+
     final String startDateFormatted = _formatDate(tenancy.agreement.startDate);
     final String endDateFormatted = _formatDate(tenancy.agreement.endDate);
-    
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -249,9 +362,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -271,9 +382,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ),
-            
             const SizedBox(height: 20),
-            
             LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth < 300) {
@@ -290,7 +399,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: _buildRentalFeeSection(context, tenancy, primaryColor),
+                      child:
+                          _buildRentalFeeSection(context, tenancy, primaryColor),
                     ),
                     const SizedBox(width: 16),
                     _buildTenancyRemainingSection(remainingDays, primaryColor),
@@ -304,7 +414,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildRentalFeeSection(BuildContext context, Tenancy tenancy, Color primaryColor) {
+  Widget _buildRentalFeeSection(
+      BuildContext context, Tenancy tenancy, Color primaryColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -404,8 +515,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             final itemWidth = 110.0;
             final spacing = 16.0;
             final availableWidth = constraints.maxWidth;
-            final itemsPerRow = (availableWidth + spacing) ~/ (itemWidth + spacing);
-            
+            final itemsPerRow =
+                (availableWidth + spacing) ~/ (itemWidth + spacing);
+
             final smartLockTile = Expanded(
               child: Consumer(
                 builder: (context, ref, child) {
@@ -416,23 +528,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     context,
                     'Smart Lock',
                     Icons.lock_outline,
-                    '/smart-home', 
+                    '/smart-home',
                     onTap: () {
                       // Handle the async states on tap
                       smartDeviceAsync.when(
                         data: (data) {
-                          final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
+                          final firstLock =
+                              data.locks.isNotEmpty ? data.locks.first : null;
                           if (firstLock != null) {
                             // Navigate to detail screen with the lock object
                             context.go('/smart-home/detail', extra: firstLock);
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No smart lock found!')),
+                              const SnackBar(
+                                  content: Text('No smart lock found!')),
                             );
                           }
                         },
-                        error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Could not load smart lock: $e')),
+                        error: (e, s) =>
+                            ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('Could not load smart lock: $e')),
                         ),
                         loading: () {
                           // You could show a small spinner, but doing nothing is fine
@@ -470,7 +586,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               );
             }
-            
+
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -482,35 +598,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     '/agreement',
                   ),
                   const SizedBox(width: 16),
-                  Consumer(
-                    builder: (context, ref, child) {
-                      final smartDeviceAsync = ref.watch(smartDevicesProvider);
-                      return _buildQuickAccessTile(
-                        context,
-                        'Smart Lock',
-                        Icons.lock_outline,
-                        '/smart-home',
-                        onTap: () {
-                          smartDeviceAsync.when(
-                            data: (data) {
-                              final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
-                              if (firstLock != null) {
-                                context.go('/smart-home/detail', extra: firstLock);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('No smart lock found!')),
-                                );
-                              }
-                            },
-                            error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Could not load smart lock: $e')),
-                            ),
-                            loading: () {},
-                          );
-                        },
-                      );
-                    }
-                  ),
+                  Consumer(builder: (context, ref, child) {
+                    final smartDeviceAsync = ref.watch(smartDevicesProvider);
+                    return _buildQuickAccessTile(
+                      context,
+                      'Smart Lock',
+                      Icons.lock_outline,
+                      '/smart-home',
+                      onTap: () {
+                        smartDeviceAsync.when(
+                          data: (data) {
+                            final firstLock =
+                                data.locks.isNotEmpty ? data.locks.first : null;
+                            if (firstLock != null) {
+                              context.go('/smart-home/detail', extra: firstLock);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('No smart lock found!')),
+                              );
+                            }
+                          },
+                          error: (e, s) =>
+                              ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text('Could not load smart lock: $e')),
+                          ),
+                          loading: () {},
+                        );
+                      },
+                    );
+                  }),
                   const SizedBox(width: 16),
                   _buildQuickAccessTile(
                     context,
@@ -528,14 +646,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildQuickAccessTile(
-    BuildContext context, 
-    String title, 
-    IconData icon, 
-    String route,
-    {VoidCallback? onTap}
-  ) {
+      BuildContext context, String title, IconData icon, String route,
+      {VoidCallback? onTap}) {
     const Color primaryColor = Color(0xFF076633);
-    
+
     return ConstrainedBox(
       constraints: const BoxConstraints(
         minWidth: 100,
@@ -545,18 +659,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         aspectRatio: 1.0,
         child: Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: Colors.white,
           child: InkWell(
-            onTap: onTap ?? () {
-              if (route == '/agreement' || route == '/smart-home') {
-                context.go(route);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$title feature coming soon!')),
-                );
-              }
-            },
+            onTap: onTap ??
+                () {
+                  if (route == '/agreement' || route == '/smart-home') {
+                    context.go(route);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$title feature coming soon!')),
+                    );
+                  }
+                },
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(12.0),
@@ -596,14 +712,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildLatestInvoices(BuildContext context) {
     const Color primaryColor = Color(0xFF076633);
-    
+
     return Consumer(
       builder: (context, ref, child) {
         final invoicesAsyncValue = ref.watch(invoicesProvider);
-        
+
         return Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           color: Colors.white,
           clipBehavior: Clip.antiAlias, // Add this
           child: Padding(
@@ -615,18 +732,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     const Text(
                       'Latest Invoices',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     TextButton(
                       onPressed: () {
                         context.go('/invoices');
                       },
-                      child: const Text('See all', style: TextStyle(color: primaryColor)),
+                      child: const Text('See all',
+                          style: TextStyle(color: primaryColor)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-
                 invoicesAsyncValue.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(24.0),
@@ -643,9 +761,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: Text('No invoices found.'),
                       );
                     }
-                    
+
                     final latestInvoices = invoices.take(3).toList();
-                    
+
                     return ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -654,7 +772,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       itemBuilder: (context, index) {
                         final invoice = latestInvoices[index];
                         return _buildInvoiceRow(
-                          context: context, 
+                          context: context,
                           invoice: invoice,
                         );
                       },
@@ -672,8 +790,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- 1. UPDATE THIS WIDGET ---
-  Widget _buildInvoiceRow({required BuildContext context, required Invoice invoice}) {
+  Widget _buildInvoiceRow(
+      {required BuildContext context, required Invoice invoice}) {
     // --- Logic for status and icon ---
     final String statusText;
     final Color statusColor;
@@ -689,15 +807,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       iconData = Icons.receipt; // Default icon
     }
     // --- End of logic ---
-    
-    final title = invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
+
+    final title =
+        invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
 
     return InkWell(
       onTap: () {
         context.go('/invoices/detail', extra: invoice);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0), // Adjust padding
+        padding:
+            const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0), // Adjust padding
         child: Row(
           children: [
             // --- Use dynamic icon and color ---
@@ -707,8 +827,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Text(invoice.invoiceNumber,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(title,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             ),
@@ -721,7 +843,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Text(
                 // --- Use dynamic status text ---
                 statusText,
-                style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12),
               ),
             ),
           ],
@@ -730,7 +855,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- 2. UPDATE THIS HELPER ---
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -739,7 +863,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return Colors.blue;
       case 'due':
         // 'due' (but not overdue) can be orange
-        return Colors.orange; 
+        return Colors.orange;
       default:
         return Colors.grey;
     }
