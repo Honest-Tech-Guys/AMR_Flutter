@@ -1,4 +1,4 @@
-// This model now matches your detailed API response
+// Updated Tenancy model with tenantable_type support
 class Tenancy {
   final int id;
   final String code;
@@ -8,11 +8,14 @@ class Tenancy {
   final double houseDeposit;
   final double utilityDeposit;
   final double keyDeposit;
-  final String fullPropertyName; // "Skyview Residence / B-19-20 / Room: room3"
+  final String fullPropertyName;
   final Agreement agreement;
-
-  // We can add more fields as needed
   
+  // NEW: Fields for determining unit_id vs room_id
+  final int tenantId;
+  final String tenantableType; // "App\\Models\\Room" or "App\\Models\\Unit"
+  final int tenantableId; // The actual room_id or unit_id
+
   Tenancy({
     required this.id,
     required this.code,
@@ -24,9 +27,17 @@ class Tenancy {
     required this.keyDeposit,
     required this.fullPropertyName,
     required this.agreement,
+    required this.tenantId,
+    required this.tenantableType,
+    required this.tenantableId,
   });
 
-  // Factory constructor to create a Tenancy from JSON
+  // Helper method to check if it's a room
+  bool get isRoom => tenantableType.contains('Room');
+  
+  // Helper method to check if it's a unit
+  bool get isUnit => tenantableType.contains('Unit');
+
   factory Tenancy.fromJson(Map<String, dynamic> json) {
     return Tenancy(
       id: json['id'],
@@ -39,11 +50,15 @@ class Tenancy {
       keyDeposit: double.tryParse(json['key_deposit'].toString()) ?? 0.0,
       fullPropertyName: json['full_property_name'] ?? 'N/A',
       agreement: Agreement.fromJson(json['agreement'] ?? {}),
+      
+      // NEW: Parse tenantable fields
+      tenantId: json['tenant_id'] ?? 0,
+      tenantableType: json['tenantable_type'] ?? '',
+      tenantableId: json['tenantable_id'] ?? 0,
     );
   }
 }
 
-// A new class to hold the nested agreement details
 class Agreement {
   final int id;
   final String landlordName;
