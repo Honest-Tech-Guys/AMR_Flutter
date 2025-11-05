@@ -18,6 +18,8 @@ import 'package:rms_tenant_app/features/smart_home/presentation/smart_lock_detai
 import 'package:rms_tenant_app/shared/models/smart_devices_model.dart';
 import 'package:rms_tenant_app/features/smart_home/presentation/add_smart_lock_screen.dart';
 
+// --- 1. IMPORT THE NEW SCREEN ---
+import 'package:rms_tenant_app/features/auth/presentation/not_tenant_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -28,10 +30,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
-    
-    // --- THIS IS THE FIX ---
-    // The `refreshListenable` line is removed.
-    // The `redirect` block below already `watch`es authState.
+
+    // No refreshListenable needed, as 'authState' is watched.
 
     routes: [
       GoRoute(
@@ -47,7 +47,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const VerificationScreen(),
       ),
 
-      // --- Main App Shell ---
+      // --- 2. ADD THE NEW NOT-TENANT ROUTE ---
+      GoRoute(
+        path: NotTenantScreen.route, // This is '/not-tenant'
+        builder: (context, state) => const NotTenantScreen(),
+      ),
+
+      // --- Main App Shell (Unchanged) ---
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return MainScaffold(navigationShell: navigationShell);
@@ -55,22 +61,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           // Branch 0: Home
           StatefulShellBranch(
-            navigatorKey: _shellNavigatorKey, 
+            navigatorKey: _shellNavigatorKey,
             routes: [
               GoRoute(
-                path: '/',
-                builder: (context, state) => const HomeScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'profile',
-                    builder: (context, state) => const ProfileScreen(),
-                  ),
-                  GoRoute(
-                    path: 'notifications',
-                    builder: (context, state) => const NotificationScreen(),
-                  ),
-                ]
-              ),
+                  path: '/',
+                  builder: (context, state) => const HomeScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'profile',
+                      builder: (context, state) => const ProfileScreen(),
+                    ),
+                    GoRoute(
+                      path: 'notifications',
+                      builder: (context, state) => const NotificationScreen(),
+                    ),
+                  ]),
             ],
           ),
           // Branch 1: Agreement
@@ -127,14 +132,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
 
-    // --- UPDATED REDIRECT LOGIC ---
+    // --- 3. UPDATED REDIRECT LOGIC ---
     redirect: (context, state) {
       final status = authState.asData?.value;
-      
+
       final isAuthPage = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
       final isVerifyPage = state.matchedLocation == '/verify';
-    
+      // --- ADDED ---
+      final isNotTenantPage = state.matchedLocation == NotTenantScreen.route;
+
       // While loading, don't redirect
       if (authState.isLoading || status == null) {
         return null;
@@ -142,17 +149,30 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 1. User is logged out
       if (status == AuthStatus.signedOut) {
+        // If on login/register, stay. Otherwise, redirect to login.
         return isAuthPage ? null : '/login';
       }
-    
-      // 2. User needs verification
+
+      // --- ADDED ---
+      // 2. User is Not a Tenant
+      if (status == AuthStatus.notTenant) {
+        // If on the not-tenant page, stay. Otherwise, redirect to it.
+        return isNotTenantPage ? null : NotTenantScreen.route;
+      }
+      // --- END ADDED ---
+
+      // 3. User needs verification
       if (status == AuthStatus.needsVerification) {
+        // If on verify page, stay. Otherwise, redirect to it.
         return isVerifyPage ? null : '/verify';
       }
-    
-      // 3. User is signed in (and verified)
+
+      // 4. User is signed in (and verified and tenant)
       if (status == AuthStatus.signedIn) {
-        return (isAuthPage || isVerifyPage) ? '/' : null;
+        // --- MODIFIED ---
+        // If on *any* auth-related page, redirect to home ('/').
+        final isAnyAuthFlowPage = isAuthPage || isVerifyPage || isNotTenantPage;
+        return isAnyAuthFlowPage ? '/' : null;
       }
 
       return null;

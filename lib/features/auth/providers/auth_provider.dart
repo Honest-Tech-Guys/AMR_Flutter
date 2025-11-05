@@ -4,16 +4,22 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rms_tenant_app/core/api/api_client.dart';
 
 // 1. ADD NEW STATE
-enum AuthStatus { signedIn, signedOut, loading, needsVerification }
+enum AuthStatus {
+  signedIn,
+  signedOut,
+  loading,
+  needsVerification,
+  notTenant // <-- ADDED
+}
 
 // --- 1. CORE PROVIDERS ---
 
 // Provider for the secure storage with your Android options
 final _storageProvider = Provider((ref) => const FlutterSecureStorage(
-  aOptions: AndroidOptions(
-    encryptedSharedPreferences: true,
-  ),
-));
+      aOptions: AndroidOptions(
+        encryptedSharedPreferences: true,
+      ),
+    ));
 
 final _dioProvider = Provider((ref) => Dio());
 
@@ -32,7 +38,7 @@ final authRepositoryProvider = Provider(
   ),
 );
 
-// --- 2. AUTH REPOSITORY (with verification logic) ---
+// --- 2. AUTH REPOSITORY (with verification and role logic) ---
 class AuthRepository {
   final ApiClient _apiClient;
   final FlutterSecureStorage _storage;
@@ -52,6 +58,7 @@ class AuthRepository {
       return null;
     }
   }
+
   Future<void> _saveToken(String token) async {
     try {
       await _storage.write(key: _tokenKey, value: token);
@@ -66,6 +73,7 @@ class AuthRepository {
       }
     }
   }
+
   Future<void> _deleteToken() async {
     try {
       await _storage.delete(key: _tokenKey);
@@ -78,22 +86,26 @@ class AuthRepository {
   Future<void> saveUnverifiedEmail(String email) async {
     await _storage.write(key: _emailKey, value: email);
   }
+
   Future<String?> getUnverifiedEmail() async {
     return await _storage.read(key: _emailKey);
   }
+
   Future<void> _deleteUnverifiedEmail() async {
     await _storage.delete(key: _emailKey);
   }
+
   Future<void> _saveVerificationStatus(bool isVerified) async {
     await _storage.write(key: _verifiedKey, value: isVerified.toString());
   }
+
   Future<bool> isVerified() async {
     final status = await _storage.read(key: _verifiedKey);
     return status == 'true';
   }
-  
+
   // --- Updated Login function ---
-  Future<bool> login(String email, String password) async {
+  Future<AuthStatus> login(String email, String password) async {
     try {
       final response = await _apiClient.post(
         '/login',
@@ -102,17 +114,42 @@ class AuthRepository {
 
       if (response.statusCode == 200 && response.data['token'] != null) {
         final token = response.data['token'] as String;
+        final user = response.data['user'];
+
+        if (user == null) {
+          throw 'Invalid user data in response';
+        }
+
+        // Check for "Tenant" role
+        bool isTenant = false;
+        if (user['roles'] != null && user['roles'] is List) {
+          for (var role in (user['roles'] as List)) {
+            if (role['name'] == 'Tenant') {
+              isTenant = true;
+              break;
+            }
+          }
+        }
+
+        // If not a tenant, delete token/data and return notTenant status
+        if (!isTenant) {
+          await logout(); // Use logout to clear all data
+          return AuthStatus.notTenant;
+        }
+
+        // --- User is a Tenant, proceed with normal logic ---
         await _saveToken(token);
-        
-        final isVerified = response.data['user']?['email_verified_at'] != null;
-        await _saveVerificationStatus(isVerified); 
-        
+
+        final isVerified = user['email_verified_at'] != null;
+        await _saveVerificationStatus(isVerified);
+
         if (!isVerified) {
-          await saveUnverifiedEmail(email); 
+          await saveUnverifiedEmail(email);
+          return AuthStatus.needsVerification;
         } else {
           await _deleteUnverifiedEmail();
+          return AuthStatus.signedIn;
         }
-        return isVerified;
       } else {
         throw 'Invalid response from server';
       }
@@ -143,7 +180,7 @@ class AuthController extends AsyncNotifier<AuthStatus> {
 
   @override
   Future<AuthStatus> build() async {
-    _authRepository = ref.watch(authRepositoryProvider); 
+    _authRepository = ref.watch(authRepositoryProvider);
 
     final token = await _authRepository._getToken();
     if (token == null) {
@@ -161,13 +198,11 @@ class AuthController extends AsyncNotifier<AuthStatus> {
   Future<void> login(String email, String password) async {
     state = const AsyncValue.loading();
     try {
-      final isVerified = await _authRepository.login(email, password);
-      
-      if (isVerified) {
-        state = const AsyncValue.data(AuthStatus.signedIn);
-      } else {
-        state = const AsyncValue.data(AuthStatus.needsVerification);
-      }
+      // This now returns the specific AuthStatus
+      final authStatus = await _authRepository.login(email, password);
+
+      // Set state to the status determined by the repository
+      state = AsyncValue.data(authStatus);
     } catch (e, s) {
       state = AsyncValue.error(e, s);
     }
@@ -177,6 +212,11 @@ class AuthController extends AsyncNotifier<AuthStatus> {
     state = const AsyncValue.loading();
     await _authRepository.logout();
     state = const AsyncValue.data(AuthStatus.signedOut);
+  }
+
+  // Helper to manually set state to signedOut, e.g., from the 'notTenant' screen
+  void completeLogout() {
+     state = const AsyncValue.data(AuthStatus.signedOut);
   }
 }
 
@@ -193,10 +233,11 @@ class ResendEmailController extends AsyncNotifier<void> {
     state = const AsyncValue.loading();
     try {
       final apiClient = ref.watch(apiClientProvider);
-      await apiClient.post('/resend-verification-email'); 
+      await apiClient.post('/resend-verification-email');
       state = const AsyncValue.data(null);
     } on DioException catch (e, s) {
-      state = AsyncValue.error(e.response?.data['message'] ?? 'Failed to resend', s);
+      state = AsyncValue.error(
+          e.response?.data['message'] ?? 'Failed to resend', s);
     } catch (e, s) {
       state = AsyncValue.error(e, s);
     }
