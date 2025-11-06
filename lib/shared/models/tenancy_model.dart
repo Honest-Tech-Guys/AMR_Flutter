@@ -1,3 +1,5 @@
+import 'package:rms_tenant_app/shared/models/equipment_model.dart';
+import 'package:rms_tenant_app/shared/models/setting_model.dart';
 // Complete Tenancy model matching the latest API response
 class Tenancy {
   final int id;
@@ -323,6 +325,8 @@ class Tenantable {
   final String createdAt;
   final String updatedAt;
   final Unit unit;
+  final List<Equipment> equipment;
+  final Setting? setting;
   final List<Meter> meters;
   final List<Lock> locks;
 
@@ -339,6 +343,8 @@ class Tenantable {
     required this.unit,
     this.meters = const [],
     this.locks = const [],
+    required this.equipment,
+    this.setting,
   });
 
   factory Tenantable.fromJson(Map<String, dynamic> json) {
@@ -355,6 +361,13 @@ class Tenantable {
       unit: Unit.fromJson(json['unit'] ?? {}),
       meters: (json['meters'] as List?)?.map((m) => Meter.fromJson(m)).toList() ?? [],
       locks: (json['locks'] as List?)?.map((l) => Lock.fromJson(l)).toList() ?? [],
+      equipment: (json['equipment'] as List?)
+          ?.map((e) => Equipment.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
+      
+      setting: json['setting'] != null
+          ? Setting.fromJson(json['setting'] as Map<String, dynamic>)
+          : null,
     );
   }
 }

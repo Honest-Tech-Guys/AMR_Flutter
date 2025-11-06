@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rms_tenant_app/features/home/home_provider/home_provider.dart';
+// --- ADDED IMPORTS ---
+import 'package:rms_tenant_app/shared/models/equipment_model.dart';
+import 'package:rms_tenant_app/shared/models/setting_model.dart';
+// --- END ADDED IMPORTS ---
 import 'package:rms_tenant_app/shared/models/tenancy_model.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -26,7 +30,7 @@ class AgreementScreen extends ConsumerWidget {
         appBar: AppBar(
           title: const Text(
             'Agreement',
-            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+            style: TextStyle(color: Colors.black87),
           ),
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -122,7 +126,8 @@ class AgreementScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
-            Icon(Icons.warning_amber_outlined, color: Colors.orange[700], size: 28),
+            Icon(Icons.warning_amber_outlined,
+                color: Colors.orange[700], size: 28),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -149,7 +154,8 @@ class AgreementScreen extends ConsumerWidget {
               onPressed: () => _showSignatureDialog(context, tenancyId),
               child: const Text(
                 'Sign Now',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF076633)),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Color(0xFF076633)),
               ),
             )
           ],
@@ -160,13 +166,14 @@ class AgreementScreen extends ConsumerWidget {
 
   Widget _buildAgreementDetailsTab(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
-    
+
     final endDate = DateTime.parse(tenancy.agreement.endDate);
     final today = DateTime.now();
     final daysRemaining = endDate.difference(today).inDays;
 
-    final bool isSigned = tenancy.agreement.tenantSignature != null && tenancy.agreement.tenantSignature!.isNotEmpty;
-    
+    final bool isSigned = tenancy.agreement.tenantSignature != null &&
+        tenancy.agreement.tenantSignature!.isNotEmpty;
+
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
@@ -176,7 +183,7 @@ class AgreementScreen extends ConsumerWidget {
         ],
         _buildStatusCard(tenancy, daysRemaining, primaryColor),
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Agreement Information'),
         const SizedBox(height: 8),
         _buildDetailCard([
@@ -198,9 +205,9 @@ class AgreementScreen extends ConsumerWidget {
             Icons.date_range_outlined,
           ),
         ]),
-        
+
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Landlord Information'),
         const SizedBox(height: 8),
         Container(
@@ -227,18 +234,24 @@ class AgreementScreen extends ConsumerWidget {
               ),
               childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               children: [
-                if (tenancy.tenantable.unit.property.owner.ownerProfile.nricNumber != null) ...[
+                if (tenancy.tenantable.unit.property.owner.ownerProfile
+                        .nricNumber !=
+                    null) ...[
                   _buildEnhancedDetailRow(
                     'NRIC',
-                    tenancy.tenantable.unit.property.owner.ownerProfile.nricNumber!,
+                    tenancy.tenantable.unit.property.owner.ownerProfile
+                        .nricNumber!,
                     Icons.badge_outlined,
                   ),
                 ],
-                if (tenancy.tenantable.unit.property.owner.ownerProfile.altPhoneNumber != null) ...[
+                if (tenancy.tenantable.unit.property.owner.ownerProfile
+                        .altPhoneNumber !=
+                    null) ...[
                   const Divider(height: 24),
                   _buildEnhancedDetailRow(
                     'Phone',
-                    tenancy.tenantable.unit.property.owner.ownerProfile.altPhoneNumber!,
+                    tenancy.tenantable.unit.property.owner.ownerProfile
+                        .altPhoneNumber!,
                     Icons.phone_outlined,
                   ),
                 ],
@@ -250,19 +263,25 @@ class AgreementScreen extends ConsumerWidget {
                     Icons.email_outlined,
                   ),
                 ],
-                if (tenancy.tenantable.unit.property.owner.ownerProfile.addressLine1 != null) ...[
+                if (tenancy.tenantable.unit.property.owner.ownerProfile
+                        .addressLine1 !=
+                    null) ...[
                   const Divider(height: 24),
                   _buildEnhancedDetailRow(
                     'Address',
-                    tenancy.tenantable.unit.property.owner.ownerProfile.addressLine1!,
+                    tenancy.tenantable.unit.property.owner.ownerProfile
+                        .addressLine1!,
                     Icons.location_on_outlined,
                   ),
                 ],
-                if (tenancy.tenantable.unit.property.owner.ownerProfile.nationality != null) ...[
+                if (tenancy.tenantable.unit.property.owner.ownerProfile
+                        .nationality !=
+                    null) ...[
                   const Divider(height: 24),
                   _buildEnhancedDetailRow(
                     'Nationality',
-                    tenancy.tenantable.unit.property.owner.ownerProfile.nationality!,
+                    tenancy.tenantable.unit.property.owner.ownerProfile
+                        .nationality!,
                     Icons.flag_outlined,
                   ),
                 ],
@@ -270,9 +289,9 @@ class AgreementScreen extends ConsumerWidget {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Tenant Information'),
         const SizedBox(height: 8),
         Container(
@@ -324,7 +343,7 @@ class AgreementScreen extends ConsumerWidget {
         ),
 
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Financial Terms'),
         const SizedBox(height: 8),
         _buildDetailCard([
@@ -352,7 +371,7 @@ class AgreementScreen extends ConsumerWidget {
             ),
           ],
         ]),
-        
+
         if (tenancy.agreement.paymentBankName != null) ...[
           const SizedBox(height: 16),
           _buildSectionTitle('Payment Details'),
@@ -381,7 +400,7 @@ class AgreementScreen extends ConsumerWidget {
             ],
           ]),
         ],
-        
+
         const SizedBox(height: 24),
       ],
     );
@@ -389,13 +408,13 @@ class AgreementScreen extends ConsumerWidget {
 
   Widget _buildTenancyDetailsTab(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
-    
+
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
         _buildPropertyCard(tenancy),
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Property Details'),
         const SizedBox(height: 8),
         _buildDetailCard([
@@ -429,23 +448,51 @@ class AgreementScreen extends ConsumerWidget {
             Icons.home_work_outlined,
           ),
         ]),
-        
+
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Address'),
         const SizedBox(height: 8),
         _buildDetailCard([
           _buildAddressRow(tenancy.tenantable.unit.property),
         ]),
-        
+
         const SizedBox(height: 16),
-        
+
         _buildSectionTitle('Unit Features'),
         const SizedBox(height: 8),
         _buildFeaturesCard(tenancy.tenantable.unit),
-        
-        const SizedBox(height: 16),
-        
+
+        // --- START NEW SECTIONS ---
+
+        // 1. Room Settings (from setting model)
+        if (tenancy.tenantable.setting != null) ...[
+          const SizedBox(height: 16),
+          _buildSectionTitle('Room Details'),
+          const SizedBox(height: 8),
+          _buildRoomDetailsCard(tenancy.tenantable.setting!),
+        ],
+
+        // 2. Amenities (from setting model)
+        if (tenancy.tenantable.setting != null) ...[
+          const SizedBox(height: 16),
+          _buildSectionTitle('Amenities'),
+          const SizedBox(height: 8),
+          _buildAmenitiesGrid(tenancy.tenantable.setting!),
+        ],
+
+        // 3. Equipment
+        if (tenancy.tenantable.equipment.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildSectionTitle('In-Room Equipment'),
+          const SizedBox(height: 8),
+          _buildEquipmentCard(tenancy.tenantable.equipment),
+        ],
+
+        // --- END NEW SECTIONS ---
+
+        const SizedBox(height: 16), // Add spacing
+
         _buildSectionTitle('Rental Information'),
         const SizedBox(height: 8),
         _buildDetailCard([
@@ -467,14 +514,14 @@ class AgreementScreen extends ConsumerWidget {
             Icons.calendar_month_outlined,
           ),
         ]),
-        
+
         if (tenancy.tenantable.meters.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildSectionTitle('Smart Meter'),
           const SizedBox(height: 8),
           _buildMeterCard(tenancy.tenantable.meters.first),
         ],
-        
+
         if (tenancy.remarks.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildSectionTitle('Additional Information'),
@@ -483,7 +530,7 @@ class AgreementScreen extends ConsumerWidget {
             _buildRemarksRow(tenancy.remarks),
           ]),
         ],
-        
+
         const SizedBox(height: 24),
       ],
     );
@@ -551,11 +598,11 @@ class AgreementScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Sign Document Button
               // Sign Document Button or Signed Chip
               if (isSigned)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.green.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -563,7 +610,8 @@ class AgreementScreen extends ConsumerWidget {
                   ),
                   child: Row(
                     children: const [
-                      Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                      Icon(Icons.check_circle_outline,
+                          size: 16, color: Colors.green),
                       SizedBox(width: 6),
                       Text(
                         'Signed',
@@ -604,6 +652,130 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
+  // --- NEW WIDGETS FOR SETTING & EQUIPMENT ---
+
+  /// Builds a card to show room-specific details from the [Setting] model.
+  Widget _buildRoomDetailsCard(Setting setting) {
+    return _buildDetailCard([
+      _buildEnhancedDetailRow(
+          'Bed Type', setting.bedType ?? 'N/A', Icons.bed_outlined),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Bath Type', setting.bathType ?? 'N/A', Icons.bathtub_outlined),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Furnishing', setting.furnishing ?? 'N/A', Icons.chair_outlined),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Aircond', setting.aircond ?? 'N/A', Icons.ac_unit),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Window', setting.window ?? 'N/A', Icons.window_outlined),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Wall Type', setting.typeOfWalls ?? 'N/A', Icons.layers_outlined),
+      const Divider(height: 24),
+      _buildEnhancedDetailRow(
+          'Meter Type', setting.meterType ?? 'N/A', Icons.electric_meter_outlined),
+      if (setting.furnishingDetails != null &&
+          setting.furnishingDetails!.isNotEmpty) ...[
+        const Divider(height: 24),
+        _buildEnhancedDetailRow('Furnishing Details',
+            setting.furnishingDetails!, Icons.notes_outlined),
+      ]
+    ]);
+  }
+
+  /// Builds a card with a grid of amenities from the [Setting] model.
+  Widget _buildAmenitiesGrid(Setting setting) {
+    return _buildDetailCard([
+      GridView(
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, // 3 items per row
+          childAspectRatio: 1.8, // Adjusted for space
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+        ),
+        children: [
+          _buildAmenityItem(Icons.wifi, 'WiFi', setting.wifi),
+          _buildAmenityItem(
+              Icons.microwave_outlined, 'Cooking', setting.cookingFacilities),
+          _buildAmenityItem(Icons.kitchen, 'Fridge', setting.fridge),
+          _buildAmenityItem(Icons.local_laundry_service_outlined, 'Washing',
+              setting.washingMachine),
+          _buildAmenityItem(
+              Icons.dry_cleaning_outlined, 'Dryer', setting.dryer),
+          _buildAmenityItem(
+              Icons.hot_tub_outlined, 'Water Heater', setting.waterHeater),
+          _buildAmenityItem(
+              Icons.cleaning_services_outlined, 'Cleaning', setting.cleaning),
+          _buildAmenityItem(
+              Icons.balcony_outlined, 'Balcony', setting.balcony),
+        ],
+      ),
+    ]);
+  }
+
+  /// Helper for the amenities grid.
+  Widget _buildAmenityItem(IconData icon, String label, int isAvailable) {
+    bool available = isAvailable == 1;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon,
+            size: 24,
+            color: available ? const Color(0xFF076633) : Colors.grey[400]),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: available ? Colors.black87 : Colors.grey[600],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          available ? 'Yes' : 'No',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: available ? const Color(0xFF076633) : Colors.grey[600],
+          ),
+        )
+      ],
+    );
+  }
+
+  /// Builds a card to show the list of [Equipment].
+  Widget _buildEquipmentCard(List<Equipment> equipment) {
+    return _buildDetailCard(
+      equipment
+          .map((item) => Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.check,
+                        color: Colors.grey[600]),
+                    title: Text(item.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle:
+                        item.description != null ? Text(item.description!) : null,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  if (item != equipment.last) const Divider(height: 16),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  // --- END NEW WIDGETS ---
+
   // Helper Methods
   void _makePhoneCall(String phoneNumber) async {
     final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
@@ -635,7 +807,8 @@ class AgreementScreen extends ConsumerWidget {
   }
 
   // UI Widgets
-  Widget _buildStatusCard(Tenancy tenancy, int daysRemaining, Color primaryColor) {
+  Widget _buildStatusCard(
+      Tenancy tenancy, int daysRemaining, Color primaryColor) {
     Color statusColor;
     IconData statusIcon;
     String statusText;
@@ -695,9 +868,11 @@ class AgreementScreen extends ConsumerWidget {
             children: [
               _buildStatusInfo('Days Left', '$daysRemaining'),
               Container(width: 1, height: 40, color: Colors.white30),
-              _buildStatusInfo('Payment Day', '${tenancy.agreement.paymentDueDay}th'),
+              _buildStatusInfo(
+                  'Payment Day', '${tenancy.agreement.paymentDueDay}th'),
               Container(width: 1, height: 40, color: Colors.white30),
-              _buildStatusInfo('Monthly', 'RM ${tenancy.rentalFee.toStringAsFixed(0)}'),
+              _buildStatusInfo(
+                  'Monthly', 'RM ${tenancy.rentalFee.toStringAsFixed(0)}'),
             ],
           ),
         ],
@@ -757,14 +932,16 @@ class AgreementScreen extends ConsumerWidget {
               ),
               image: tenancy.tenantable.unit.unitImagesUrls.isNotEmpty
                   ? DecorationImage(
-                      image: NetworkImage(tenancy.tenantable.unit.unitImagesUrls.first),
+                      image: NetworkImage(
+                          tenancy.tenantable.unit.unitImagesUrls.first),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
             child: tenancy.tenantable.unit.unitImagesUrls.isEmpty
                 ? Center(
-                    child: Icon(Icons.home_outlined, size: 64, color: Colors.grey[400]),
+                    child: Icon(Icons.home_outlined,
+                        size: 64, color: Colors.grey[400]),
                   )
                 : null,
           ),
@@ -797,8 +974,9 @@ class AgreementScreen extends ConsumerWidget {
   }
 
   Widget _buildMeterCard(Meter meter) {
-    Color statusColor = meter.connectionStatus == 'online' ? Colors.green : Colors.grey;
-    
+    Color statusColor =
+        meter.connectionStatus == 'online' ? Colors.green : Colors.grey;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -826,7 +1004,8 @@ class AgreementScreen extends ConsumerWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -975,11 +1154,14 @@ class AgreementScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildFeatureItem(Icons.bed_outlined, '${unit.bedroomCount}', 'Bedrooms'),
+          _buildFeatureItem(
+              Icons.bed_outlined, '${unit.bedroomCount}', 'Bedrooms'),
           Container(width: 1, height: 50, color: Colors.grey[200]),
-          _buildFeatureItem(Icons.bathroom_outlined, '${unit.bathroomCount}', 'Bathrooms'),
+          _buildFeatureItem(
+              Icons.bathroom_outlined, '${unit.bathroomCount}', 'Bathrooms'),
           Container(width: 1, height: 50, color: Colors.grey[200]),
-          _buildFeatureItem(Icons.square_foot_outlined, unit.squareFeet ?? 'N/A', 'Sq Ft'),
+          _buildFeatureItem(
+              Icons.square_foot_outlined, unit.squareFeet ?? 'N/A', 'Sq Ft'),
         ],
       ),
     );
@@ -1217,7 +1399,7 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
   SignatureMode _mode = SignatureMode.draw;
   String? _uploadedImagePath;
   final GlobalKey _paintKey = GlobalKey();
-  
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -1387,8 +1569,8 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
                 onTap: _pickImage,
                 child: Container(
                   height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
                     border: Border.all(
                       color: Colors.grey[300]!,
                       width: 2,
@@ -1396,7 +1578,7 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
                     ),
                     borderRadius: BorderRadius.circular(12),
                     color: const Color.fromARGB(255, 250, 250, 250),
-                    ),
+                  ),
                   child: _uploadedImagePath != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
@@ -1408,10 +1590,10 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.cloud_upload_outlined,
                               size: 48,
-                              color: const Color.fromARGB(255, 83, 207, 16),
+                              color: Color.fromARGB(255, 83, 207, 16),
                             ),
                             const SizedBox(height: 12),
                             Text(
@@ -1476,7 +1658,8 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: (_mode == SignatureMode.draw && _points.isEmpty) ||
-                            (_mode == SignatureMode.upload && _uploadedImagePath == null)
+                            (_mode == SignatureMode.upload &&
+                                _uploadedImagePath == null)
                         ? null
                         : () {
                             _submitSignature();
@@ -1498,21 +1681,25 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
       ),
     );
   }
+
   Future<String?> _convertPointsToDataUrl() async {
     if (_points.isEmpty) return null;
 
-    final RenderBox? renderBox = _paintKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox =
+        _paintKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) {
       return null;
     }
     final size = renderBox.size;
 
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size.width, size.height));
+    final canvas =
+        Canvas(recorder, Rect.fromLTWH(0, 0, size.width, size.height));
     final painter = SignaturePainter(_points);
 
     // Paint a white background
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = Colors.white);
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = Colors.white);
 
     painter.paint(canvas, size);
     final picture = recorder.endRecording();
@@ -1571,7 +1758,7 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
       }
     }
   }
-  
+
   Future<void> _submitSignature() async {
     String? dataUri;
 
@@ -1601,22 +1788,22 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
         if (pathExtension == '.jpg' || pathExtension == '.jpeg') {
           extension = 'jpeg';
         }
-        
+
         dataUri = 'data:image/$extension;base64,$base64Image';
       }
 
       // Get API client from ref
       final apiClient = ref.read(apiClientProvider);
-      
+
       // Get Tenancy ID from the widget property
       final tenancyId = widget.tenancyId;
-      
+
       final url = '/sign-as-tenant/$tenancyId';
       final body = {'tenant_signature': dataUri};
 
       // Make API call
       await apiClient.put(url, data: body);
-      
+
       // Invalidate provider to refresh UI
       ref.invalidate(homeTenancyProvider);
 
@@ -1624,7 +1811,7 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
       if (mounted) Navigator.of(context).pop();
       // Close signature dialog
       if (mounted) Navigator.of(context).pop();
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Signature submitted successfully'),
@@ -1632,11 +1819,10 @@ class _SignatureDialogState extends ConsumerState<SignatureDialog> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-
     } catch (e) {
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to submit signature: $e'),
