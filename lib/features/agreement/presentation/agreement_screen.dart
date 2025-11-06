@@ -6,6 +6,11 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:path/path.dart' as p;
+import 'package:rms_tenant_app/features/auth/providers/auth_provider.dart';
 
 class AgreementScreen extends ConsumerWidget {
   const AgreementScreen({super.key});
@@ -55,6 +60,43 @@ class AgreementScreen extends ConsumerWidget {
             ),
           ),
           data: (tenancy) {
+            // --- HANDLE NULL TENANCY ---
+            if (tenancy == null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.description_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No Active Tenancy',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'You don\'t have an active tenancy to view agreement details.',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // --- NORMAL FLOW: Show tabs ---
             return TabBarView(
               children: [
                 _buildAgreementDetailsTab(context, tenancy),
@@ -68,16 +110,70 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildNeedsSigningCard(BuildContext context, int tenancyId) {
+    return Card(
+      elevation: 0,
+      color: Colors.yellow[50],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.orange[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_outlined, color: Colors.orange[700], size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Action Required',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[800],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Your tenancy agreement requires a signature.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => _showSignatureDialog(context, tenancyId),
+              child: const Text(
+                'Sign Now',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF076633)),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAgreementDetailsTab(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
     
     final endDate = DateTime.parse(tenancy.agreement.endDate);
     final today = DateTime.now();
     final daysRemaining = endDate.difference(today).inDays;
+
+    final bool isSigned = tenancy.agreement.tenantSignature != null && tenancy.agreement.tenantSignature!.isNotEmpty;
     
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
+        if (!isSigned) ...[
+          _buildNeedsSigningCard(context, tenancy.id),
+          const SizedBox(height: 16),
+        ],
         _buildStatusCard(tenancy, daysRemaining, primaryColor),
         const SizedBox(height: 16),
         
@@ -395,6 +491,8 @@ class AgreementScreen extends ConsumerWidget {
 
   Widget _buildDocumentsTab(BuildContext context, Tenancy tenancy) {
     final documents = tenancy.agreement.attachmentUrls;
+    final tenantSignature = tenancy.agreement.tenantSignature;
+    final bool isSigned = tenantSignature != null && tenantSignature.isNotEmpty;
 
     if (documents.isEmpty) {
       return Center(
@@ -454,12 +552,37 @@ class AgreementScreen extends ConsumerWidget {
                 ),
               ),
               // Sign Document Button
-              IconButton(
-                icon: const Icon(Icons.draw_outlined),
-                onPressed: () => _showSignatureDialog(context),
-                tooltip: 'Sign Document',
-                color: const Color(0xFF076633),
-              ),
+              // Sign Document Button or Signed Chip
+              if (isSigned)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                      SizedBox(width: 6),
+                      Text(
+                        'Signed',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.draw_outlined),
+                  // <-- UPDATE THIS LINE -->
+                  onPressed: () => _showSignatureDialog(context, tenancy.id),
+                  tooltip: 'Sign Document',
+                  color: const Color(0xFF076633),
+                ),
               // Download Button
               IconButton(
                 icon: const Icon(Icons.download_outlined),
@@ -503,10 +626,11 @@ class AgreementScreen extends ConsumerWidget {
     }
   }
 
-  void _showSignatureDialog(BuildContext context) {
+  void _showSignatureDialog(BuildContext context, int tenancyId) {
     showDialog(
       context: context,
-      builder: (BuildContext context) => const SignatureDialog(),
+      // <-- PASS tenancyId TO DIALOG -->
+      builder: (BuildContext context) => SignatureDialog(tenancyId: tenancyId),
     );
   }
 
@@ -1078,19 +1202,21 @@ class AgreementScreen extends ConsumerWidget {
 }
 
 // Signature Dialog Widget - FIXED VERSION with Upload Option
-class SignatureDialog extends StatefulWidget {
-  const SignatureDialog({super.key});
+class SignatureDialog extends ConsumerStatefulWidget {
+  final int tenancyId; // <-- ADD THIS
+  const SignatureDialog({super.key, required this.tenancyId});
 
   @override
-  State<SignatureDialog> createState() => _SignatureDialogState();
+  ConsumerState<SignatureDialog> createState() => _SignatureDialogState();
 }
 
 enum SignatureMode { draw, upload }
 
-class _SignatureDialogState extends State<SignatureDialog> {
+class _SignatureDialogState extends ConsumerState<SignatureDialog> {
   final List<Offset?> _points = [];
   SignatureMode _mode = SignatureMode.draw;
   String? _uploadedImagePath;
+  final GlobalKey _paintKey = GlobalKey();
   
   @override
   Widget build(BuildContext context) {
@@ -1238,6 +1364,7 @@ class _SignatureDialogState extends State<SignatureDialog> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: GestureDetector(
+                    key: _paintKey,
                     onPanUpdate: (details) {
                       setState(() {
                         _points.add(details.localPosition);
@@ -1371,6 +1498,33 @@ class _SignatureDialogState extends State<SignatureDialog> {
       ),
     );
   }
+  Future<String?> _convertPointsToDataUrl() async {
+    if (_points.isEmpty) return null;
+
+    final RenderBox? renderBox = _paintKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return null;
+    }
+    final size = renderBox.size;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size.width, size.height));
+    final painter = SignaturePainter(_points);
+
+    // Paint a white background
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = Colors.white);
+
+    painter.paint(canvas, size);
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.width.toInt(), size.height.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+
+    if (byteData == null) return null;
+
+    final bytes = byteData.buffer.asUint8List();
+    final base64Image = base64Encode(bytes);
+    return 'data:image/png;base64,$base64Image';
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -1418,26 +1572,79 @@ class _SignatureDialogState extends State<SignatureDialog> {
     }
   }
   
-  void _submitSignature() {
-    // TODO: Implement API call here
-    if (_mode == SignatureMode.draw) {
-      // Convert _points to image and send to API
-      // final signatureImage = await _convertPointsToImage(_points);
-      // await yourApiService.submitSignature(signatureImage);
-    } else {
-      // Upload the image file
-      // await yourApiService.uploadSignature(File(_uploadedImagePath!));
-    }
-    
-    Navigator.of(context).pop();
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Signature submitted successfully'),
-        backgroundColor: Color(0xFF076633),
-        behavior: SnackBarBehavior.floating,
-      ),
+  Future<void> _submitSignature() async {
+    String? dataUri;
+
+    // Show a loading indicator (optional but good)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
+
+    try {
+      if (_mode == SignatureMode.draw) {
+        // Convert points to image data
+        dataUri = await _convertPointsToDataUrl();
+        if (dataUri == null) {
+          throw Exception('Please provide a signature.');
+        }
+      } else {
+        // Upload the image file
+        if (_uploadedImagePath == null) return;
+        final bytes = await File(_uploadedImagePath!).readAsBytes();
+        final base64Image = base64Encode(bytes);
+
+        // Get extension for mime type
+        String extension = 'png'; // default
+        final pathExtension = p.extension(_uploadedImagePath!).toLowerCase();
+        if (pathExtension == '.jpg' || pathExtension == '.jpeg') {
+          extension = 'jpeg';
+        }
+        
+        dataUri = 'data:image/$extension;base64,$base64Image';
+      }
+
+      // Get API client from ref
+      final apiClient = ref.read(apiClientProvider);
+      
+      // Get Tenancy ID from the widget property
+      final tenancyId = widget.tenancyId;
+      
+      final url = '/sign-as-tenant/$tenancyId';
+      final body = {'tenant_signature': dataUri};
+
+      // Make API call
+      await apiClient.put(url, data: body);
+      
+      // Invalidate provider to refresh UI
+      ref.invalidate(homeTenancyProvider);
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      // Close signature dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signature submitted successfully'),
+          backgroundColor: Color(0xFF076633),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit signature: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
 

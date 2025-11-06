@@ -221,6 +221,7 @@ class Agreement {
   final String landlordName;
   final String? landlordPhone;
   final String? landlordEmail;
+  final String? tenantSignature;
   final String? landlordIdentityNumber;
   final String? landlordAddress;
   final String tenantName;
@@ -251,6 +252,7 @@ class Agreement {
     required this.landlordName,
     this.landlordPhone,
     this.landlordEmail,
+    this.tenantSignature,
     this.landlordIdentityNumber,
     this.landlordAddress,
     required this.tenantName,
@@ -305,6 +307,7 @@ class Agreement {
       createdAt: json['created_at'] ?? '',
       updatedAt: json['updated_at'] ?? '',
       attachmentUrls: List<String>.from(json['attachment_urls'] ?? []),
+      tenantSignature: json['tenant_signature'],
     );
   }
 }
