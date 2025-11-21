@@ -36,6 +36,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // --- HELPER FUNCTION TO FORMAT DATES ---
+  String _formatDate(String dateStr) {
+    if (dateStr.isEmpty || dateStr == 'N/A') return 'N/A';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
@@ -151,53 +162,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
 
-        // --- NORMAL FLOW: Tenancy exists ---
-        final String tenantName = tenancy.agreement.tenantName;
+        // --- (MODIFIED) GET DATA FROM TENANCY, NOT AGREEMENT ---
+        final String tenantName =
+            tenancy.tenant.name; // <-- 1. CHANGED from tenancy.agreement.tenantName
 
+        // --- (NEW) HANDLE UPCOMING TENANCY ---
+        if (tenancy.status == 'Upcoming') {
+          return _buildUpcomingTenancy(context, tenancy, tenantName);
+        }
+
+        // --- NORMAL FLOW: Active Tenancy ---
         return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              'Welcome, $tenantName',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Colors.black,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-            backgroundColor: Colors.white,
-            elevation: 1,
-            titleSpacing: 16,
-            actions: [
-              Consumer(
-                builder: (context, ref, child) {
-                  final notificationAsync = ref.watch(notificationProvider);
-                  final unreadCount =
-                      notificationAsync.asData?.value.unreadCount ?? 0;
-
-                  return Badge(
-                    label: Text('$unreadCount'),
-                    isLabelVisible: unreadCount > 0,
-                    child: IconButton(
-                      icon: const Icon(Icons.notifications_none,
-                          color: Colors.black, size: 28),
-                      onPressed: () {
-                        context.go('/notifications');
-                      },
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout, color: Colors.black),
-                onPressed: () {
-                  ref.read(authControllerProvider.notifier).logout();
-                },
-              ),
-              const SizedBox(width: 10),
-            ],
-          ),
+          appBar: _buildHomeAppBar(context, tenantName),
           backgroundColor: Colors.grey[100],
           body: SafeArea(
             child: RefreshIndicator(
@@ -221,8 +197,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         );
       },
-
       error: (error, stackTrace) {
+        // ... (Error handling remains the same) ...
         // Check for authentication errors
         final isAuthError = error.toString().contains('Authentication') ||
             error.toString().contains('authenticated') ||
@@ -292,11 +268,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         );
       },
-
       loading: () {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Loading...', style: TextStyle(color: Colors.black)),
+            title:
+                const Text('Loading...', style: TextStyle(color: Colors.black)),
             backgroundColor: Colors.white,
             elevation: 1,
           ),
@@ -310,14 +286,142 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // All helper widgets remain the same...
+  // --- (NEW) WIDGET FOR UPCOMING TENANCY ---
+  Widget _buildUpcomingTenancy(
+      BuildContext context, Tenancy tenancy, String tenantName) {
+    const Color primaryColor = Color(0xFF076633);
+    final String startDateFormatted = _formatDate(tenancy.tenancyPeriodStartDate);
+
+    return Scaffold(
+      appBar: _buildHomeAppBar(context, tenantName),
+      backgroundColor: Colors.grey[100],
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: primaryColor,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // Custom "Upcoming" Card
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.event_available,
+                            size: 48, color: primaryColor),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Your Tenancy is Upcoming!',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Welcome! Your tenancy for ${tenancy.fullPropertyName} is scheduled to begin on:',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.grey[700], fontSize: 14, height: 1.4),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          startDateFormatted,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 24,
+                            color: primaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Some features may be limited until your tenancy starts.',
+                          textAlign: TextAlign.center,
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildQuickAccess(context),
+                const SizedBox(height: 24),
+                _buildLatestInvoices(context),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- (NEW) Extracted AppBar for reuse ---
+  AppBar _buildHomeAppBar(BuildContext context, String tenantName) {
+    return AppBar(
+      title: Text(
+        'Welcome, $tenantName',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: Colors.black,
+        ),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      ),
+      backgroundColor: Colors.white,
+      elevation: 1,
+      titleSpacing: 16,
+      actions: [
+        Consumer(
+          builder: (context, ref, child) {
+            final notificationAsync = ref.watch(notificationProvider);
+            final unreadCount =
+                notificationAsync.asData?.value.unreadCount ?? 0;
+
+            return Badge(
+              label: Text('$unreadCount'),
+              isLabelVisible: unreadCount > 0,
+              child: IconButton(
+                icon: const Icon(Icons.notifications_none,
+                    color: Colors.black, size: 28),
+                onPressed: () {
+                  context.go('/notifications');
+                },
+              ),
+            );
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.logout, color: Colors.black),
+          onPressed: () {
+            ref.read(authControllerProvider.notifier).logout();
+          },
+        ),
+        const SizedBox(width: 10),
+      ],
+    );
+  }
+
+  // --- (MODIFIED) My Unit Card ---
   Widget _buildMyUnitCard(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
-    final DateTime endDate = DateTime.tryParse(tenancy.agreement.endDate) ?? DateTime.now();
+
+    // --- 2. (CHANGED) Source data from main Tenancy object ---
+    final DateTime? endDate = DateTime.tryParse(tenancy.tenancyPeriodEndDate);
     final DateTime today = DateTime.now();
-    final int remainingDays = endDate.difference(today).inDays;
-    final String startDateFormatted = _formatDate(tenancy.agreement.startDate);
-    final String endDateFormatted = _formatDate(tenancy.agreement.endDate);
+    final int remainingDays =
+        endDate?.difference(today).inDays ?? 0;
+    final String startDateFormatted = _formatDate(tenancy.tenancyPeriodStartDate);
+    final String endDateFormatted = _formatDate(tenancy.tenancyPeriodEndDate);
+    // --- End Changes ---
 
     return Card(
       elevation: 2,
@@ -331,10 +435,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Tenancy Period', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                Text('Tenancy Period',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                 const SizedBox(height: 4),
                 Text('$startDateFormatted – $endDateFormatted',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14)),
               ],
             ),
             const SizedBox(height: 12),
@@ -343,11 +449,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.grey),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: () => context.go('/agreement'),
-                child: const Text('View Details', style: TextStyle(color: Colors.black87)),
+                child: const Text('View Details',
+                    style: TextStyle(color: Colors.black87)),
               ),
             ),
             const SizedBox(height: 20),
@@ -359,14 +467,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     children: [
                       _buildRentalFeeSection(context, tenancy, primaryColor),
                       const SizedBox(height: 16),
-                      _buildTenancyRemainingSection(remainingDays, primaryColor),
+                      _buildTenancyRemainingSection(
+                          remainingDays, primaryColor),
                     ],
                   );
                 }
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildRentalFeeSection(context, tenancy, primaryColor)),
+                    Expanded(
+                        child: _buildRentalFeeSection(
+                            context, tenancy, primaryColor)),
                     const SizedBox(width: 16),
                     _buildTenancyRemainingSection(remainingDays, primaryColor),
                   ],
@@ -379,12 +490,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildRentalFeeSection(BuildContext context, Tenancy tenancy, Color primaryColor) {
+  Widget _buildRentalFeeSection(
+      BuildContext context, Tenancy tenancy, Color primaryColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Rental Fee', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        Text('Rental Fee',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12)),
         const SizedBox(height: 4),
         Text('RM ${tenancy.rentalFee.toStringAsFixed(2)}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -395,7 +508,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0)),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
             onPressed: () {
@@ -403,7 +517,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SnackBar(content: Text('Auto Debit setup coming soon!')),
               );
             },
-            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Set up Auto Debit')),
+            child: const FittedBox(
+                fit: BoxFit.scaleDown, child: Text('Set up Auto Debit')),
           ),
         ),
       ],
@@ -415,57 +530,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Tenancy Remaining', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        Text('Tenancy Remaining',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12)),
         const SizedBox(height: 4),
         Text('$remainingDays Days',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFF076633))),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 24,
+                color: Color(0xFF076633))),
       ],
     );
   }
 
-  String _formatDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    } catch (e) {
-      return dateStr;
-    }
-  }
-
   Widget _buildQuickAccess(BuildContext context) {
+    // ... (This widget remains unchanged) ...
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
           padding: EdgeInsets.only(bottom: 16.0),
-          child: Text('Quick Access', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          child: Text('Quick Access',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         ),
         LayoutBuilder(
           builder: (context, constraints) {
             final itemWidth = 110.0;
             final spacing = 16.0;
             final availableWidth = constraints.maxWidth;
-            final itemsPerRow = (availableWidth + spacing) ~/ (itemWidth + spacing);
+            final itemsPerRow =
+                (availableWidth + spacing) ~/ (itemWidth + spacing);
 
             final smartLockTile = Expanded(
               child: Consumer(
                 builder: (context, ref, child) {
                   final smartDeviceAsync = ref.watch(smartDevicesProvider);
-                  return _buildQuickAccessTile(context, 'Smart Lock', Icons.lock_outline, '/smart-home',
+                  return _buildQuickAccessTile(
+                    context, 'Smart Lock', Icons.lock_outline, '/smart-home',
                     onTap: () {
                       smartDeviceAsync.when(
                         data: (data) {
-                          final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
+                          final firstLock =
+                              data.locks.isNotEmpty ? data.locks.first : null;
                           if (firstLock != null) {
                             context.go('/smart-home/detail', extra: firstLock);
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No smart lock found!')),
+                              const SnackBar(
+                                  content: Text('No smart lock found!')),
                             );
                           }
                         },
-                        error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Could not load smart lock: $e')),
+                        error: (e, s) =>
+                            ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('Could not load smart lock: $e')),
                         ),
                         loading: () {},
                       );
@@ -479,11 +597,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Expanded(child: _buildQuickAccessTile(context, 'Agreement', Icons.description_outlined, '/agreement')),
+                  Expanded(
+                      child: _buildQuickAccessTile(
+                          context, 'Agreement', Icons.description_outlined, '/agreement')),
                   const SizedBox(width: 16),
                   smartLockTile,
                   const SizedBox(width: 16),
-                  Expanded(child: _buildQuickAccessTile(context, 'History', Icons.history, '/history')),
+                  Expanded(
+                      child: _buildQuickAccessTile(
+                          context, 'History', Icons.history, '/history')),
                 ],
               );
             }
@@ -492,26 +614,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildQuickAccessTile(context, 'Agreement', Icons.description_outlined, '/agreement'),
+                  _buildQuickAccessTile(
+                      context, 'Agreement', Icons.description_outlined, '/agreement'),
                   const SizedBox(width: 16),
                   Consumer(
                     builder: (context, ref, child) {
                       final smartDeviceAsync = ref.watch(smartDevicesProvider);
-                      return _buildQuickAccessTile(context, 'Smart Lock', Icons.lock_outline, '/smart-home',
+                      return _buildQuickAccessTile(
+                        context, 'Smart Lock', Icons.lock_outline, '/smart-home',
                         onTap: () {
                           smartDeviceAsync.when(
                             data: (data) {
-                              final firstLock = data.locks.isNotEmpty ? data.locks.first : null;
+                              final firstLock = data.locks.isNotEmpty
+                                  ? data.locks.first
+                                  : null;
                               if (firstLock != null) {
-                                context.go('/smart-home/detail', extra: firstLock);
+                                context.go('/smart-home/detail',
+                                    extra: firstLock);
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('No smart lock found!')),
+                                  const SnackBar(
+                                      content: Text('No smart lock found!')),
                                 );
                               }
                             },
-                            error: (e, s) => ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Could not load smart lock: $e')),
+                            error: (e, s) =>
+                                ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content:
+                                      Text('Could not load smart lock: $e')),
                             ),
                             loading: () {},
                           );
@@ -520,7 +651,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     },
                   ),
                   const SizedBox(width: 16),
-                  _buildQuickAccessTile(context, 'History', Icons.history, '/history'),
+                  _buildQuickAccessTile(
+                      context, 'History', Icons.history, '/history'),
                 ],
               ),
             );
@@ -530,7 +662,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildQuickAccessTile(BuildContext context, String title, IconData icon, String route, {VoidCallback? onTap}) {
+  Widget _buildQuickAccessTile(
+      BuildContext context, String title, IconData icon, String route,
+      {VoidCallback? onTap}) {
+    // ... (This widget remains unchanged) ...
     const Color primaryColor = Color(0xFF076633);
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 100, maxWidth: 140),
@@ -538,18 +673,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         aspectRatio: 1.0,
         child: Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: Colors.white,
           child: InkWell(
-            onTap: onTap ?? () {
-              if (route == '/agreement' || route == '/smart-home') {
-                context.go(route);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$title feature coming soon!')),
-                );
-              }
-            },
+            onTap: onTap ??
+                () {
+                  if (route == '/agreement' || route == '/smart-home') {
+                    context.go(route);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$title feature coming soon!')),
+                    );
+                  }
+                },
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(12.0),
@@ -568,7 +705,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 8),
                   Flexible(
                     child: Text(title,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13),
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis),
@@ -583,13 +721,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildLatestInvoices(BuildContext context) {
+    // ... (This widget remains unchanged) ...
     const Color primaryColor = Color(0xFF076633);
     return Consumer(
       builder: (context, ref, child) {
         final invoicesAsyncValue = ref.watch(invoicesProvider);
         return Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           color: Colors.white,
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -599,10 +739,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Latest Invoices', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Latest Invoices',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                     TextButton(
                       onPressed: () => context.go('/invoices'),
-                      child: const Text('See all', style: TextStyle(color: primaryColor)),
+                      child: const Text('See all',
+                          style: TextStyle(color: primaryColor)),
                     ),
                   ],
                 ),
@@ -629,8 +772,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: latestInvoices.length,
                       padding: EdgeInsets.zero,
-                      itemBuilder: (context, index) => _buildInvoiceRow(context: context, invoice: latestInvoices[index]),
-                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) => _buildInvoiceRow(
+                          context: context, invoice: latestInvoices[index]),
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
                     );
                   },
                 ),
@@ -642,7 +787,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildInvoiceRow({required BuildContext context, required Invoice invoice}) {
+  Widget _buildInvoiceRow(
+      {required BuildContext context, required Invoice invoice}) {
+    // ... (This widget remains unchanged) ...
     final String statusText;
     final Color statusColor;
     final IconData iconData;
@@ -657,7 +804,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       iconData = Icons.receipt;
     }
 
-    final title = invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
+    final title =
+        invoice.items.isNotEmpty ? invoice.items.first.itemName : 'Invoice';
 
     return InkWell(
       onTap: () => context.go('/invoices/detail', extra: invoice),
@@ -671,8 +819,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Text(invoice.invoiceNumber,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(title,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             ),
@@ -683,7 +833,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(statusText,
-                  style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
             ),
           ],
         ),
@@ -692,11 +845,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Color _getStatusColor(String status) {
+    // ... (This widget remains unchanged) ...
     switch (status.toLowerCase()) {
-      case 'paid': return Colors.green;
-      case 'sent': return Colors.blue;
-      case 'due': return Colors.orange;
-      default: return Colors.grey;
+      case 'paid':
+        return Colors.green;
+      case 'sent':
+        return Colors.blue;
+      case 'due':
+        return Colors.orange;
+      default:
+        return Colors.grey;
     }
   }
 }

@@ -100,11 +100,13 @@ class AgreementScreen extends ConsumerWidget {
               );
             }
 
-            // --- NORMAL FLOW: Show tabs ---
+            // --- (MODIFIED) NORMAL FLOW: Show tabs ---
             return TabBarView(
               children: [
-                _buildAgreementDetailsTab(context, tenancy),
+                // --- 1. (CHANGED) Check for valid agreement ---
+                _buildAgreementTab(context, tenancy),
                 _buildTenancyDetailsTab(context, tenancy),
+                // --- 2. (CHANGED) Check for valid agreement ---
                 _buildDocumentsTab(context, tenancy),
               ],
             );
@@ -112,6 +114,43 @@ class AgreementScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  // --- (NEW) Helper widget to show when details aren't available ---
+  Widget _buildNoDetailsAvailable(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            const Text(
+              'Not Yet Available',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- (NEW) Wrapper function for Agreement Tab ---
+  Widget _buildAgreementTab(BuildContext context, Tenancy tenancy) {
+    // If agreement.id is 0, it means it's a default/empty object
+    // because the agreement was null (e.g., for an upcoming tenancy).
+    if (tenancy.agreement.id == 0) {
+      return _buildNoDetailsAvailable(
+          "Agreement details are not yet available for this tenancy.");
+    }
+    return _buildAgreementDetailsTab(context, tenancy);
   }
 
   Widget _buildNeedsSigningCard(BuildContext context, int tenancyId) {
@@ -167,9 +206,11 @@ class AgreementScreen extends ConsumerWidget {
   Widget _buildAgreementDetailsTab(BuildContext context, Tenancy tenancy) {
     const Color primaryColor = Color(0xFF076633);
 
-    final endDate = DateTime.parse(tenancy.agreement.endDate);
+    // --- 3. (CHANGED) Safely parse dates ---
+    final endDate = DateTime.tryParse(tenancy.agreement.endDate);
     final today = DateTime.now();
-    final daysRemaining = endDate.difference(today).inDays;
+    final daysRemaining = endDate?.difference(today).inDays ?? 0;
+    // --- End Changes ---
 
     final bool isSigned = tenancy.agreement.tenantSignature != null &&
         tenancy.agreement.tenantSignature!.isNotEmpty;
@@ -406,7 +447,10 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
+  // --- (MODIFIED) Tenancy Tab (Data source remains valid) ---
   Widget _buildTenancyDetailsTab(BuildContext context, Tenancy tenancy) {
+    // This tab is OKAY because it uses tenancy.tenantable, which is
+    // present in the 'Upcoming' tenancy response. No changes needed here.
     const Color primaryColor = Color(0xFF076633);
 
     return ListView(
@@ -536,7 +580,15 @@ class AgreementScreen extends ConsumerWidget {
     );
   }
 
+  // --- (MODIFIED) Documents Tab ---
   Widget _buildDocumentsTab(BuildContext context, Tenancy tenancy) {
+    // --- 4. (CHANGED) Check for valid agreement ID ---
+    if (tenancy.agreement.id == 0) {
+      return _buildNoDetailsAvailable(
+          "Agreement documents are not yet available for this tenancy.");
+    }
+    // --- End Changes ---
+
     final documents = tenancy.agreement.attachmentUrls;
     final tenantSignature = tenancy.agreement.tenantSignature;
     final bool isSigned = tenantSignature != null && tenantSignature.isNotEmpty;
@@ -653,7 +705,7 @@ class AgreementScreen extends ConsumerWidget {
   }
 
   // --- NEW WIDGETS FOR SETTING & EQUIPMENT ---
-
+  // ... (These widgets remain unchanged as they are correct) ...
   /// Builds a card to show room-specific details from the [Setting] model.
   Widget _buildRoomDetailsCard(Setting setting) {
     return _buildDetailCard([
@@ -773,7 +825,6 @@ class AgreementScreen extends ConsumerWidget {
           .toList(),
     );
   }
-
   // --- END NEW WIDGETS ---
 
   // Helper Methods
@@ -1109,6 +1160,9 @@ class AgreementScreen extends ConsumerWidget {
       case 'active':
         color = const Color(0xFF076633);
         break;
+      case 'upcoming': // --- (NEW) Handle 'Upcoming' status ---
+        color = Colors.blue;
+        break;
       case 'occupied':
         color = Colors.blue;
         break;
@@ -1384,6 +1438,7 @@ class AgreementScreen extends ConsumerWidget {
 }
 
 // Signature Dialog Widget - FIXED VERSION with Upload Option
+// ... (This widget remains unchanged) ...
 class SignatureDialog extends ConsumerStatefulWidget {
   final int tenancyId; // <-- ADD THIS
   const SignatureDialog({super.key, required this.tenancyId});
